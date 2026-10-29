@@ -17,6 +17,7 @@ import { logActivity, notifyGroup } from '../lib/events';
 import { badRequest, conflict, notFound, param, parse } from '../lib/http';
 import { loadGroupLedger } from '../lib/ledger';
 import { serializeSettlement } from '../lib/serialize';
+import { recordSettlement } from '../lib/settlement-write';
 import { sendCsv, slug } from './expenses';
 
 export const groupSettlementsRouter = Router({ mergeParams: true });
@@ -31,6 +32,7 @@ groupBalancesRouter.get('/', async (req, res) => {
     totalSpendingMinor: ledger.totalSpendingMinor,
     balances: ledger.balances,
     suggestions: ledger.suggestions,
+    simplifyDebts: ledger.simplifyDebts,
   });
 });
 
@@ -65,41 +67,7 @@ groupSettlementsRouter.post('/', async (req, res) => {
         const ledger = await loadGroupLedger(group.id, tx);
         const check = validateSettlement(ledger.balances, input.fromMemberId, input.toMemberId, input.amountMinor);
         if (!check.ok) throw badRequest(check.error);
-        const created = await tx.settlement.create({
-          data: {
-            groupId: group.id,
-            clientRequestId: input.clientRequestId,
-            fromMemberId: input.fromMemberId,
-            toMemberId: input.toMemberId,
-            amountMinor: toBig(input.amountMinor),
-            currency: group.currency,
-            method: input.method,
-            methodNote: input.methodNote,
-            date: toDateOnly(input.date),
-            notes: input.notes,
-            recordedById: user.id,
-          },
-        });
-        const amountText = formatMoney(input.amountMinor, group.currency);
-        await logActivity(tx, {
-          groupId: group.id,
-          actorUserId: user.id,
-          actorName: user.name,
-          type: 'SETTLEMENT_RECORDED',
-          entityType: 'settlement',
-          entityId: created.id,
-          summary: `${user.name} recorded ${from.displayName} paying ${to.displayName} ${amountText} (${SETTLEMENT_METHOD_LABELS[input.method]})`,
-        });
-        await notifyGroup(tx, {
-          groupId: group.id,
-          type: 'SETTLEMENT',
-          title: 'Repayment recorded',
-          body: `${from.displayName} paid ${to.displayName} ${amountText} in ${group.name}`,
-          link: `/groups/${group.id}/balances`,
-          onlyUserIds: [from.userId, to.userId].filter((id): id is string => !!id),
-          excludeUserIds: [user.id],
-        });
-        return created;
+        return recordSettlement(tx, { group, user, from, to, input });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -205,6 +173,8 @@ settlementsRouter.get('/', async (req, res) => {
         myMemberId: me.id,
         myNetMinor: ledger.balances.find((b) => b.memberId === me.id)?.netMinor ?? 0,
         suggestions: ledger.suggestions,
+        simplifyDebts: ledger.simplifyDebts,
+        isDirect: g.directKey !== null,
       };
     }),
   );

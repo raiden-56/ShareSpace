@@ -17,6 +17,7 @@ import { accessibleGroupIds, requireGroup } from '../lib/access';
 import { currentUser } from '../lib/auth';
 import { logActivity, notifyGroup } from '../lib/events';
 import { checkBudgetAlert, describeChanges, prepareExpense, writeExpenseChildren } from '../lib/expense-write';
+import { syncRecurringExpenses } from '../lib/recurring';
 import { badRequest, conflict, forbidden, notFound, param, parse } from '../lib/http';
 import {
   expenseDetailInclude,
@@ -217,6 +218,11 @@ groupExpensesRouter.post('/', async (req, res) => {
       await checkBudgetAlert(tx, group, user);
       return tx.expense.findUniqueOrThrow({ where: { id: created.id }, include: expenseDetailInclude });
     });
+    if (input.repeat !== 'NONE' && (await syncRecurringExpenses({ expenseId: expense.id })) > 0) {
+      const synced = await prisma.expense.findUniqueOrThrow({ where: { id: expense.id }, include: expenseDetailInclude });
+      res.status(201).json({ expense: serializeExpenseDetail(synced), replayed: false });
+      return;
+    }
     res.status(201).json({ expense: serializeExpenseDetail(expense), replayed: false });
   } catch (err) {
     // Two concurrent retries with the same key: the loser returns the winner's record.
@@ -256,6 +262,10 @@ groupExpensesRouter.put('/:expenseId', async (req, res) => {
   const input = parse(expenseUpdateSchema, req.body);
   const previousMemberIds = [...existing.payers.map((p) => p.memberId), ...existing.splits.map((s) => s.memberId)];
   const prepared = await prepareExpense(group, input, previousMemberIds);
+  if (existing.repeatInterval === input.repeat && fromDateOnly(existing.date) === input.date) {
+    delete prepared.data.repeatCount;
+    delete prepared.data.repeatNextDate;
+  }
   const before = expenseSnapshot(existing);
 
   const expense = await prisma.$transaction(async (tx) => {
@@ -298,6 +308,11 @@ groupExpensesRouter.put('/:expenseId', async (req, res) => {
     await checkBudgetAlert(tx, group, user);
     return full;
   });
+  if (input.repeat !== 'NONE' && (await syncRecurringExpenses({ expenseId: expense.id })) > 0) {
+    const synced = await prisma.expense.findUniqueOrThrow({ where: { id: expense.id }, include: expenseDetailInclude });
+    res.json({ expense: serializeExpenseDetail(synced) });
+    return;
+  }
   res.json({ expense: serializeExpenseDetail(expense) });
 });
 

@@ -28,6 +28,8 @@ export const groupFixture: GroupDetail = {
     name: 'Goa Trip',
     description: null,
     type: 'TRIP',
+    simplifyDebts: true,
+    isDirect: false,
     currency: 'INR',
     accent: '#386641',
     archivedAt: null,

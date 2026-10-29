@@ -14,6 +14,9 @@ const Overview = lazy(() => import('./pages/Overview'));
 const Groups = lazy(() => import('./pages/Groups'));
 const Expenses = lazy(() => import('./pages/Expenses'));
 const Settlements = lazy(() => import('./pages/Settlements'));
+const Friends = lazy(() => import('./pages/Friends'));
+const FriendDetail = lazy(() => import('./pages/FriendDetail'));
+const Help = lazy(() => import('./pages/Help'));
 const Plans = lazy(() => import('./pages/Plans'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Notifications = lazy(() => import('./pages/Notifications'));
@@ -110,6 +113,9 @@ export function App() {
             </Route>
             <Route path="/expenses" element={<Expenses />} />
             <Route path="/settlements" element={<Settlements />} />
+            <Route path="/friends" element={<Friends />} />
+            <Route path="/friends/:friendKey" element={<FriendDetail />} />
+            <Route path="/help" element={<Help />} />
             <Route path="/plans" element={<Plans />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/notifications" element={<Notifications />} />

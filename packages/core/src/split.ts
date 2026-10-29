@@ -1,7 +1,7 @@
 import { allocateEqually, allocateProportionally } from './allocate';
 import { type Minor } from './money';
 
-export const SPLIT_METHODS = ['EQUAL', 'EXACT', 'PERCENTAGE', 'SHARES', 'ITEMIZED'] as const;
+export const SPLIT_METHODS = ['EQUAL', 'EXACT', 'PERCENTAGE', 'SHARES', 'ADJUSTMENT', 'ITEMIZED'] as const;
 export type SplitMethod = (typeof SPLIT_METHODS)[number];
 
 /** Percentages are expressed in basis points: 100% = 10_000 (two decimal places of precision). */
@@ -17,6 +17,7 @@ export interface SplitParticipantInput {
    * - EXACT: amount in minor units
    * - PERCENTAGE: basis points (2500 = 25.00%)
    * - SHARES: hundredths of a share (100 = 1 share)
+   * - ADJUSTMENT: extra amount in minor units this person pays on top of an equal share (0 = none)
    * - ITEMIZED: ignored (derived from items)
    */
   value?: number;
@@ -141,6 +142,18 @@ export function computeSplit(input: SplitInput): SplitResult {
       if (sum === 0) return fail('ZERO_WEIGHTS', 'At least one participant must have more than zero shares');
       const amounts = allocateProportionally(totalMinor, participants.map((p) => p.value!));
       return { ok: true, shares: participants.map((p, i) => ({ memberId: p.memberId, amountMinor: amounts[i]! })) };
+    }
+    case 'ADJUSTMENT': {
+      // Each person's adjustment is charged to them alone; the rest is split equally among everyone.
+      for (const p of participants) {
+        if (!isNonNegInt(p.value ?? 0)) return fail('INVALID_VALUE', 'Enter a valid adjustment for every participant');
+      }
+      const extra = participants.reduce((a, p) => a + (p.value ?? 0), 0);
+      if (extra > totalMinor) {
+        return fail('SUM_MISMATCH', 'Adjustments exceed the total', totalMinor - extra);
+      }
+      const equal = allocateEqually(totalMinor - extra, participants.length);
+      return { ok: true, shares: participants.map((p, i) => ({ memberId: p.memberId, amountMinor: equal[i]! + (p.value ?? 0) })) };
     }
     default:
       return fail('INVALID_VALUE', 'Unknown split method');

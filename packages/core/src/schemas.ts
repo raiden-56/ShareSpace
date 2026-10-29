@@ -12,6 +12,7 @@ import {
   SETTLEMENT_METHODS,
 } from './domain';
 import { CURRENCY_CODES } from './money';
+import { REPEAT_INTERVALS } from './recurring';
 import { SPLIT_METHODS } from './split';
 
 /** Upper bound for a single amount: 10^12 minor units (e.g. ₹10,000,000,000.00). */
@@ -105,6 +106,8 @@ export const preferencesSchema = z.object({
     >,
   ),
   onboardingCompleted: z.boolean(),
+  /** The guided tooltip tour of the app has been finished or skipped. */
+  tourCompleted: z.boolean(),
 });
 export type Preferences = z.infer<typeof preferencesSchema>;
 export const preferencesUpdateSchema = preferencesSchema.partial();
@@ -117,6 +120,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   timeZone: 'Asia/Kolkata',
   notifications: { expenses: true, comments: true, settlements: true, budget: true, plans: true, polls: true, members: true },
   onboardingCompleted: false,
+  tourCompleted: false,
 };
 
 // ---------- Groups & members ----------
@@ -134,6 +138,8 @@ export const groupCreateSchema = z.object({
   accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   members: z.array(groupMemberDraftSchema).max(50).default([]),
   budgetMinor: positiveMinor.optional().nullable(),
+  /** Minimise the number of repayments (true) or keep each debt between the two people it arose between. */
+  simplifyDebts: z.boolean().default(true),
 });
 export type GroupCreateInput = z.input<typeof groupCreateSchema>;
 
@@ -144,6 +150,7 @@ export const groupUpdateSchema = z.object({
   currency: currencySchema.optional(),
   accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   multiCurrency: z.boolean().optional(),
+  simplifyDebts: z.boolean().optional(),
 });
 
 export const memberCreateSchema = groupMemberDraftSchema;
@@ -210,6 +217,8 @@ export const expenseSchema = z.object({
   /** Payer contributions in the expense's original currency. */
   payers: z.array(z.object({ memberId: idSchema, amountMinor: positiveMinor })).min(1, 'Select who paid').max(50),
   split: splitSchema,
+  /** Adds the same expense again on this schedule, counted from `date`. */
+  repeat: z.enum(REPEAT_INTERVALS).default('NONE'),
 });
 export type ExpenseInput = z.infer<typeof expenseSchema>;
 
@@ -260,6 +269,24 @@ export const settlementSchema = z.object({
   notes: optionalText(500),
 });
 export type SettlementInput = z.infer<typeof settlementSchema>;
+
+/**
+ * Settling up with one person across every shared group in one currency. When `amountMinor` equals
+ * the whole net balance, every group is settled (including groups where the debt runs the other
+ * way). A smaller amount is a partial repayment applied to the largest debts first.
+ */
+export const friendSettleSchema = z.object({
+  clientRequestId: z.string().uuid(),
+  currency: currencySchema,
+  amountMinor: positiveMinor,
+  method: z.enum(SETTLEMENT_METHODS),
+  methodNote: optionalText(80),
+  date: isoDateSchema,
+  notes: optionalText(500),
+});
+export type FriendSettleInput = z.infer<typeof friendSettleSchema>;
+
+export const directGroupSchema = z.object({ currency: currencySchema.optional() });
 
 export const settlementReverseSchema = z.object({ reason: trimmed(1, 300, 'Reason') });
 

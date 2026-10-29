@@ -1,6 +1,7 @@
 import {
   computeBalances,
   computeBudgetStatus,
+  computePairwiseDebts,
   inDateRange,
   suggestSettlements,
   type LedgerExpense,
@@ -14,7 +15,9 @@ import { fromDateOnly, prisma, toNum, type Tx } from '../db';
 export interface GroupLedger {
   memberIds: string[];
   balances: MemberBalance[];
+  /** Repayments that settle the group: the fewest transfers when simplifyDebts is on, otherwise who owes whom directly. */
   suggestions: Transfer[];
+  simplifyDebts: boolean;
   totalSpendingMinor: number;
   expenseCount: number;
 }
@@ -24,7 +27,8 @@ export interface GroupLedger {
  * Nothing is cached, so edits, deletions and reversals can never be double-applied.
  */
 export async function loadGroupLedger(groupId: string, db: Tx | typeof prisma = prisma): Promise<GroupLedger> {
-  const [members, expenses, settlements] = await Promise.all([
+  const [group, members, expenses, settlements] = await Promise.all([
+    db.group.findUniqueOrThrow({ where: { id: groupId }, select: { simplifyDebts: true } }),
     db.groupMember.findMany({ where: { groupId }, select: { id: true }, orderBy: { joinedAt: 'asc' } }),
     db.expense.findMany({
       where: { groupId, deletedAt: null },
@@ -60,7 +64,8 @@ export async function loadGroupLedger(groupId: string, db: Tx | typeof prisma = 
   return {
     memberIds,
     balances,
-    suggestions: suggestSettlements(balances),
+    suggestions: group.simplifyDebts ? suggestSettlements(balances) : computePairwiseDebts(ledgerExpenses, ledgerSettlements),
+    simplifyDebts: group.simplifyDebts,
     totalSpendingMinor: ledgerExpenses.reduce((a, e) => a + e.amountMinor, 0),
     expenseCount: ledgerExpenses.length,
   };

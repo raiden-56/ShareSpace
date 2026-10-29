@@ -7,6 +7,7 @@ import {
   DEFAULT_CATEGORIES,
   formatMoney,
   getCurrency,
+  occurrenceDate,
   validatePayers,
   type BudgetState,
   type ExpenseInput,
@@ -72,7 +73,7 @@ export async function prepareExpense(group: Group, input: ExpenseInput, previous
   const payerConverted = convertComponents(input.payers.map((p) => p.amountMinor), convertedTotal);
   const shareConverted = convertComponents(split.shares.map((s) => s.amountMinor), convertedTotal);
   const inputValues = new Map(input.split.participants.map((p) => [p.memberId, p.value ?? null]));
-  const keepsInput = input.split.method === 'EXACT' || input.split.method === 'PERCENTAGE' || input.split.method === 'SHARES';
+  const keepsInput = ['EXACT', 'PERCENTAGE', 'SHARES', 'ADJUSTMENT'].includes(input.split.method);
   const adj = input.split.method === 'ITEMIZED' ? input.split.adjustments : undefined;
 
   return {
@@ -92,6 +93,10 @@ export async function prepareExpense(group: Group, input: ExpenseInput, previous
       serviceMinor: toBig(adj?.serviceMinor ?? 0),
       discountMinor: toBig(adj?.discountMinor ?? 0),
       planId: input.planId ?? null,
+      // Repeat schedule restarts from the expense date; copies already created are never duplicated.
+      repeatInterval: input.repeat,
+      repeatCount: 0,
+      repeatNextDate: input.repeat === 'NONE' ? null : toDateOnly(occurrenceDate(input.date, input.repeat, 1)),
     },
     payers: input.payers.map((p, i) => ({ memberId: p.memberId, amountMinor: payerConverted[i]!, originalAmountMinor: p.amountMinor })),
     splits: split.shares.map((s, i) => ({

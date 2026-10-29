@@ -5,6 +5,7 @@ import type {
   PlanStatus,
   PlanType,
   Preferences,
+  RepeatInterval,
   Role,
   SettlementMethod,
   SettlementStatus,
@@ -42,6 +43,10 @@ export interface GroupCard {
   type: GroupType;
   currency: string;
   accent: string;
+  /** true: fewest repayments; false: each debt stays between the two people it arose between. */
+  simplifyDebts: boolean;
+  /** A private two-person group for expenses with a friend outside any group. */
+  isDirect: boolean;
   archivedAt: string | null;
   createdAt: string;
   role: Role | null;
@@ -125,6 +130,12 @@ export interface ExpenseSummary {
   date: string;
   category: string;
   splitMethod: SplitMethod;
+  /** NONE for one-off expenses; otherwise this expense is the template of a repeating series. */
+  repeatInterval: RepeatInterval;
+  /** Date the next repeat will be added (null when not repeating). */
+  repeatNextDate: string | null;
+  /** Set on copies added automatically from a repeating expense. */
+  recurringSourceId: string | null;
   planId: string | null;
   payers: MoneyPart[];
   shares: MoneyPart[];
@@ -180,7 +191,50 @@ export interface BalancesResponse {
   currency: string;
   totalSpendingMinor: number;
   balances: MemberBalance[];
+  /** Repayments that settle the group, following `simplifyDebts`. */
   suggestions: Transfer[];
+  simplifyDebts: boolean;
+}
+
+/** One person's balance with you inside one shared group. Positive netMinor = they owe you. */
+export interface FriendGroup {
+  groupId: string;
+  groupName: string;
+  currency: string;
+  accent: string;
+  isDirect: boolean;
+  archived: boolean;
+  role: Role;
+  myMemberId: string;
+  theirMemberId: string;
+  theirStatus: 'ACTIVE' | 'LEFT' | 'REMOVED';
+  netMinor: number;
+}
+
+/**
+ * Someone you share at least one group with. `key` identifies them across groups:
+ * "u.<userId>" (has an account), "e.<email>" (added by email), "m.<memberId>" (added by name, one group).
+ */
+export interface Friend {
+  key: string;
+  name: string;
+  email: string | null;
+  userId: string | null;
+  avatarColor: string | null;
+  isPlaceholder: boolean;
+  /** Net per currency across all shared groups; positive = they owe you. Empty = settled up. */
+  balances: { currency: string; netMinor: number }[];
+  groups: FriendGroup[];
+  /** The private two-person group for expenses outside groups, once created. */
+  directGroupId: string | null;
+}
+
+export interface FriendDetailResponse {
+  friend: Friend;
+  /** Expenses involving both of you, newest first (up to 50). */
+  expenses: ExpenseSummary[];
+  /** Repayments between the two of you, newest first (up to 50). */
+  settlements: Settlement[];
 }
 
 export interface Settlement {
@@ -212,6 +266,8 @@ export interface SettlementsOverview {
     myMemberId: string;
     myNetMinor: number;
     suggestions: Transfer[];
+    simplifyDebts: boolean;
+    isDirect: boolean;
   }[];
   history: Settlement[];
   members: { id: string; displayName: string; isYou: boolean }[];

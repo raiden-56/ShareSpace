@@ -2,6 +2,7 @@ export * from './money';
 export * from './allocate';
 export * from './split';
 export * from './balances';
+export * from './recurring';
 export * from './fx';
 export * from './budget';
 export * from './reports';

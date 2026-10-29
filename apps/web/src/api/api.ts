@@ -4,6 +4,7 @@ import type {
   ExpenseInput,
   ExpenseQuery,
   ExpenseUpdateInput,
+  FriendSettleInput,
   GroupCreateInput,
   ItineraryItemInput,
   PlanInput,
@@ -21,6 +22,8 @@ import type {
   DashboardResponse,
   ExpenseDetail,
   ExpenseSummary,
+  Friend,
+  FriendDetailResponse,
   GlobalPlan,
   GroupCard,
   GroupDetail,
@@ -86,7 +89,7 @@ const qs = (params: Record<string, unknown>) => {
 type Ok = { ok: true };
 
 /** Every mutation that moves money invalidates balances, dashboard, reports and budgets together. */
-const MONEY_TAGS = ['Balances', 'Dashboard', 'Reports', 'Budget', 'Groups', 'Settlements', 'Plans', 'Activity', 'Notifications'] as const;
+const MONEY_TAGS = ['Balances', 'Dashboard', 'Reports', 'Budget', 'Groups', 'Settlements', 'Plans', 'Activity', 'Notifications', 'Friends'] as const;
 
 export const api = createApi({
   reducerPath: 'api',
@@ -111,6 +114,7 @@ export const api = createApi({
     'Notifications',
     'Dashboard',
     'Reports',
+    'Friends',
   ],
   endpoints: (b) => ({
     // ---------- Auth & account ----------
@@ -200,9 +204,10 @@ export const api = createApi({
       query: (body) => ({ url: '/groups', method: 'POST', body }),
       invalidatesTags: ['Groups', 'Dashboard'],
     }),
-    updateGroup: b.mutation<{ group: { id: string } }, { groupId: string; name?: string; description?: string | null; type?: string; currency?: string; accent?: string; multiCurrency?: boolean }>({
+    updateGroup: b.mutation<{ group: { id: string } }, { groupId: string; name?: string; description?: string | null; type?: string; currency?: string; accent?: string; multiCurrency?: boolean; simplifyDebts?: boolean }>({
       query: ({ groupId, ...body }) => ({ url: `/groups/${groupId}`, method: 'PATCH', body }),
-      invalidatesTags: (_r, _e, a) => [{ type: 'Group', id: a.groupId }, 'Groups', 'Dashboard', 'Activity'],
+      // Simplify debts changes every suggested repayment, so balance views refresh too.
+      invalidatesTags: (_r, _e, a) => [{ type: 'Group', id: a.groupId }, 'Groups', 'Dashboard', 'Activity', 'Balances', 'Settlements', 'Friends'],
     }),
     archiveGroup: b.mutation<Ok, string>({
       query: (id) => ({ url: `/groups/${id}/archive`, method: 'POST' }),
@@ -308,6 +313,23 @@ export const api = createApi({
     reverseSettlement: b.mutation<{ settlement: Settlement }, { groupId: string; settlementId: string; reason: string }>({
       query: ({ groupId, settlementId, reason }) => ({ url: `/groups/${groupId}/settlements/${settlementId}/reverse`, method: 'POST', body: { reason } }),
       invalidatesTags: [...MONEY_TAGS],
+    }),
+
+    // ---------- Friends ----------
+    friends: b.query<{ friends: Friend[] }, void>({ query: () => '/friends', providesTags: ['Friends'] }),
+    friend: b.query<FriendDetailResponse, string>({ query: (key) => `/friends/${encodeURIComponent(key)}`, providesTags: ['Friends'] }),
+    /** Settles one currency with a friend across every shared group (see friendSettleSchema). */
+    settleWithFriend: b.mutation<{ settlements: Settlement[]; replayed: boolean }, { key: string; body: FriendSettleInput }>({
+      query: ({ key, body }) => ({ url: `/friends/${encodeURIComponent(key)}/settle`, method: 'POST', body }),
+      invalidatesTags: [...MONEY_TAGS],
+    }),
+    remindFriend: b.mutation<Ok, string>({
+      query: (key) => ({ url: `/friends/${encodeURIComponent(key)}/remind`, method: 'POST' }),
+    }),
+    /** Finds or creates the private two-person group used for expenses outside any group. */
+    openDirectGroup: b.mutation<{ groupId: string; created: boolean }, { key: string; currency?: string }>({
+      query: ({ key, currency }) => ({ url: `/friends/${encodeURIComponent(key)}/direct`, method: 'POST', body: currency ? { currency } : {} }),
+      invalidatesTags: ['Friends'],
     }),
 
     // ---------- Budget ----------
@@ -488,6 +510,11 @@ export const {
   useBalancesQuery,
   useGroupSettlementsQuery,
   useSettlementsOverviewQuery,
+  useFriendsQuery,
+  useFriendQuery,
+  useSettleWithFriendMutation,
+  useRemindFriendMutation,
+  useOpenDirectGroupMutation,
   useRecordSettlementMutation,
   useReverseSettlementMutation,
   useBudgetQuery,

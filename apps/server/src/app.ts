@@ -7,9 +7,11 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { csrfGuard, loadSession, requireAuth } from './lib/auth';
 import { errorHandler } from './lib/http';
+import { recurringSync } from './lib/recurring';
 import { log } from './lib/log';
 import { authRouter } from './routes/auth';
 import { attachmentsRouter, expensesRouter, groupExpensesRouter } from './routes/expenses';
+import { friendsRouter } from './routes/friends';
 import { groupsRouter, invitationsRouter } from './routes/groups';
 import { groupExportRouter, meRouter } from './routes/me';
 import { dashboardRouter, groupActivityRouter, notificationsRouter, reportsRouter, searchRouter } from './routes/misc';
@@ -47,6 +49,7 @@ export function createApp() {
   api.use('/auth', authRouter);
 
   api.use(requireAuth);
+  api.use(recurringSync);
   api.use('/me', meRouter);
   api.use('/dashboard', dashboardRouter);
   api.use('/groups', groupsRouter);
@@ -59,6 +62,7 @@ export function createApp() {
   api.use('/groups/:groupId/activity', groupActivityRouter);
   api.use('/groups/:groupId/export', groupExportRouter);
   api.use('/invitations', invitationsRouter);
+  api.use('/friends', friendsRouter);
   api.use('/expenses', expensesRouter);
   api.use('/attachments', attachmentsRouter);
   api.use('/settlements', settlementsRouter);

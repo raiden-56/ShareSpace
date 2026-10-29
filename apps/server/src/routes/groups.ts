@@ -49,6 +49,9 @@ async function groupCard(groupId: string, userId: string) {
     type: group.type,
     currency: group.currency,
     accent: group.accent,
+    simplifyDebts: group.simplifyDebts,
+    /** A two-person group for expenses with a friend outside any group. */
+    isDirect: group.directKey !== null,
     archivedAt: group.archivedAt?.toISOString() ?? null,
     createdAt: group.createdAt.toISOString(),
     role: me?.role ?? null,
@@ -73,7 +76,8 @@ groupsRouter.get('/', async (req, res) => {
   const user = currentUser(req);
   const archived = req.query.archived === 'true';
   const memberships = await prisma.groupMember.findMany({
-    where: { userId: user.id, status: 'ACTIVE', group: { archivedAt: archived ? { not: null } : null } },
+    // Direct (two-person) groups appear under Friends, not in the group list.
+    where: { userId: user.id, status: 'ACTIVE', group: { archivedAt: archived ? { not: null } : null, directKey: null } },
     select: { groupId: true },
     orderBy: { group: { updatedAt: 'desc' } },
   });
@@ -96,6 +100,7 @@ groupsRouter.post('/', async (req, res) => {
         type: input.type,
         currency: input.currency,
         accent,
+        simplifyDebts: input.simplifyDebts,
         ownerId: user.id,
         members: {
           create: [{ userId: user.id, displayName: user.name, email: user.email, role: 'OWNER' }],
@@ -175,6 +180,7 @@ groupsRouter.patch('/:groupId', async (req, res) => {
         currency: input.currency,
         accent: input.accent,
         multiCurrency: input.multiCurrency,
+        simplifyDebts: input.simplifyDebts,
       },
     });
     if (input.currency) await tx.budget.updateMany({ where: { groupId: group.id }, data: { currency: input.currency } });
@@ -185,7 +191,10 @@ groupsRouter.patch('/:groupId', async (req, res) => {
       type: 'GROUP_UPDATED',
       entityType: 'group',
       entityId: group.id,
-      summary: `${user.name} updated the group details`,
+      summary:
+        input.simplifyDebts !== undefined && input.simplifyDebts !== group.simplifyDebts
+          ? `${user.name} turned ${input.simplifyDebts ? 'on' : 'off'} simplified debts`
+          : `${user.name} updated the group details`,
     });
     return g;
   });
@@ -253,6 +262,7 @@ groupsRouter.post('/:groupId/categories', async (req, res) => {
 groupsRouter.post('/:groupId/members', async (req, res) => {
   const user = currentUser(req);
   const { group } = await requireGroup(req, 'manageMembers');
+  if (group.directKey) throw conflict('Expenses with a friend are just between the two of you. Create a group to add more people.');
   const input = parse(memberCreateSchema, req.body);
   const active = await prisma.groupMember.count({ where: { groupId: group.id, status: 'ACTIVE' } });
   if (active >= 100) throw conflict('A group can have at most 100 members.');
@@ -381,6 +391,7 @@ groupsRouter.get('/:groupId/invitations', async (req, res) => {
 groupsRouter.post('/:groupId/invitations', async (req, res) => {
   const user = currentUser(req);
   const { group, member } = await requireGroup(req, 'manageMembers');
+  if (group.directKey) throw conflict('Expenses with a friend are just between the two of you. Create a group to add more people.');
   const input = parse(invitationCreateSchema, req.body);
   if (input.role === 'ADMIN' && member.role !== 'OWNER') throw forbidden('Only the owner can invite admins.');
   const alreadyMember = await prisma.groupMember.findFirst({ where: { groupId: group.id, status: 'ACTIVE', user: { email: input.email } } });

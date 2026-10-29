@@ -45,6 +45,7 @@ describe('settlement confirmation', () => {
       api.util.upsertQueryData('balances', 'g1', {
         currency: 'INR',
         totalSpendingMinor: 30000,
+        simplifyDebts: true,
         balances: [
           { memberId: 'm1', paidMinor: 30000, shareMinor: 10000, settlementsPaidMinor: 0, settlementsReceivedMinor: 0, netMinor: 20000 },
           { memberId: 'm2', paidMinor: 0, shareMinor: 10000, settlementsPaidMinor: 0, settlementsReceivedMinor: 0, netMinor: -10000 },

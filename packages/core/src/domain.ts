@@ -109,6 +109,7 @@ export const NOTIFICATION_TYPES = [
   'POLL_DEADLINE',
   'POLL_CLOSED',
   'MEMBER_JOINED',
+  'PAYMENT_REMINDER',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -125,6 +126,7 @@ export function notificationPrefKey(type: NotificationType): NotificationPrefKey
     case 'COMMENT':
       return 'comments';
     case 'SETTLEMENT':
+    case 'PAYMENT_REMINDER':
       return 'settlements';
     case 'BUDGET_WARNING':
       return 'budget';
