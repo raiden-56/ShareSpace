@@ -25,6 +25,7 @@ import { MemberAvatar } from '../../components/common/MemberAvatar';
 import { BalancePanelSkeleton, SettlementListSkeleton } from '../../components/common/Skeletons';
 import { EmptyState, ErrorState } from '../../components/common/States';
 import { SettlementHistory, SuggestionRow } from '../../components/settlements/SettlementParts';
+import { SIMPLIFY_EXPLANATION, SimplifyDebtsControl, SimplifyModeLabel } from '../../components/groups/SimplifyDebts';
 
 export default function GroupBalances() {
   const { groupId, helpers } = useGroupContext();
@@ -37,6 +38,7 @@ export default function GroupBalances() {
   const currency = helpers.data.group.currency;
   const canRecord = helpers.can('editRecords');
   const name = (id: string) => (id === helpers.me ? 'You' : helpers.memberName(id));
+  const simplified = balances.data?.simplifyDebts ?? helpers.data.group.simplifyDebts;
 
   const rows = (balances.data?.balances ?? [])
     .filter((b) => helpers.memberById.get(b.memberId)?.status === 'ACTIVE' || b.netMinor !== 0 || b.paidMinor !== 0 || b.shareMinor !== 0)
@@ -47,7 +49,11 @@ export default function GroupBalances() {
       <Stack spacing={2.5}>
         <SectionCard
           title="Suggested repayments"
-          subtitle="The fewest payments we could find to settle everyone. Nothing changes until a payment is recorded."
+          subtitle={
+            simplified
+              ? 'The fewest payments we could find to settle everyone. Nothing changes until a payment is recorded.'
+              : 'Who owes whom, after netting what each pair owes each other. Nothing changes until a payment is recorded.'
+          }
           action={
             canRecord && (
               <Button variant="outlined" size="small" startIcon={<HandCoins size={16} />} onClick={() => dispatch(openSettleDialog({ groupId }))}>
@@ -56,6 +62,21 @@ export default function GroupBalances() {
             )
           }
         >
+          <Box sx={{ p: 1.75, mb: 2, borderRadius: 2.5, bgcolor: 'surface.sage' }} data-testid="balance-mode">
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              All expenses and repayments in this group are combined, so each person has one balance.
+            </Typography>
+            <Stack spacing={1}>
+              <SimplifyModeLabel simplified={simplified} />
+              {helpers.can('manageSettings') ? (
+                <SimplifyDebtsControl groupId={groupId} value={simplified} editable />
+              ) : (
+                <Typography variant="caption" component="p">
+                  {simplified ? SIMPLIFY_EXPLANATION.on : SIMPLIFY_EXPLANATION.off}
+                </Typography>
+              )}
+            </Stack>
+          </Box>
           {balances.error ? (
             <ErrorState error={balances.error} onRetry={balances.refetch} />
           ) : !balances.data ? (
@@ -69,10 +90,14 @@ export default function GroupBalances() {
                 .map((t) => (
                   <SuggestionRow key={`${t.fromMemberId}-${t.toMemberId}`} transfer={t} groupId={groupId} currency={currency} name={helpers.memberName} myMemberId={helpers.me} canRecord={canRecord} />
                 ))}
-              <Typography variant="caption" component="p">
-                Suggestions use a greedy method that settles the group in at most one fewer payment than the number of people with a balance. It is not
-                guaranteed to be the absolute minimum for every situation.
-              </Typography>
+              <Stack spacing={0.5}>
+                <SimplifyModeLabel simplified={simplified} variant="caption" />
+                <Typography variant="caption" component="p">
+                  {simplified
+                    ? 'Suggestions use a greedy method that settles the group in at most one fewer payment than the number of people with a balance. It is not guaranteed to be the absolute minimum for every situation.'
+                    : 'Each suggestion is a real debt between two people. If you owe someone and they owe you, only the difference is shown.'}
+                </Typography>
+              </Stack>
             </Stack>
           )}
         </SectionCard>

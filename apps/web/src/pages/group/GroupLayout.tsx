@@ -1,6 +1,6 @@
 import { Link as RouterLink, Outlet, useLocation } from 'react-router-dom';
-import { Alert, Box, Button, Card, Chip, IconButton, Skeleton, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material';
-import { HandCoins, Plus, Settings } from 'lucide-react';
+import { Alert, Box, Button, Card, Chip, IconButton, Link, Skeleton, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material';
+import { ArrowLeft, HandCoins, Plus, Settings, UserRound } from 'lucide-react';
 import { GROUP_TYPE_LABELS, ROLE_LABELS } from '@sharespace/core';
 import { useRestoreGroupMutation, toApiError } from '../../api/api';
 import { useGroupContext } from '../../hooks/useGroupContext';
@@ -28,11 +28,16 @@ export default function GroupLayout() {
   const [restore, { isLoading: restoring }] = useRestoreGroupMutation();
   const base = `/groups/${groupId}`;
   const sub = pathname.slice(base.length).replace(/^\//, '').split('/')[0] ?? '';
-  const current = sub === 'settings' ? false : TABS.some((t) => t.path === sub) ? sub : '';
+  const group = data?.group;
+  // Direct groups hold expenses with one friend outside any group: there are no members to manage.
+  const isDirect = !!group?.isDirect;
+  const tabs = isDirect ? TABS.filter((t) => t.path !== 'members') : TABS;
+  const current = sub === 'settings' ? false : tabs.some((t) => t.path === sub) ? sub : '';
+  const friend = isDirect ? data?.members.find((m) => !m.isYou) : undefined;
+  const friendLink = friend?.userId ? `/friends/${encodeURIComponent(`u.${friend.userId}`)}` : '/friends';
 
   if (error) return <ErrorState error={error} onRetry={refetch} title="Could not load this group" />;
 
-  const group = data?.group;
   return (
     <Box>
       <Card sx={{ mb: 2.5, overflow: 'hidden' }}>
@@ -48,31 +53,52 @@ export default function GroupLayout() {
               <>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
                   <Typography variant="h1" component="h1" sx={{ overflowWrap: 'anywhere' }}>
-                    {group.name}
+                    {isDirect ? `You & ${friend?.displayName ?? 'friend'}` : group.name}
                   </Typography>
                   {group.archivedAt && <Chip size="small" label="Archived" />}
                 </Stack>
-                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 0.75, color: 'text.secondary', flexWrap: 'wrap', rowGap: 0.5 }}>
-                  <Stack direction="row" spacing={0.75} alignItems="center">
-                    <GroupTypeIcon type={group.type} size={16} />
-                    <Typography variant="body2" color="text.secondary">
-                      {GROUP_TYPE_LABELS[group.type]}
+                {isDirect ? (
+                  <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 0.75, color: 'text.secondary', flexWrap: 'wrap', rowGap: 0.5 }}>
+                    <Stack direction="row" spacing={0.75} alignItems="center">
+                      <UserRound size={16} aria-hidden />
+                      <Typography variant="body2" color="text.secondary">
+                        Expenses outside any group
+                      </Typography>
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary" aria-hidden>
+                      ·
                     </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {group.currency}
+                    </Typography>
+                    <Link component={RouterLink} to={friendLink} variant="body2" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontWeight: 600 }}>
+                      <ArrowLeft size={14} aria-hidden />
+                      {friend ? `All balances with ${friend.displayName}` : 'Friends'}
+                    </Link>
                   </Stack>
-                  <Typography variant="body2" color="text.secondary" aria-hidden>
-                    ·
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {group.currency}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" aria-hidden>
-                    ·
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    You are {data ? ROLE_LABELS[data.role].toLowerCase() : ''}
-                  </Typography>
-                  <AvatarStack members={group.members} total={group.memberCount} size={24} />
-                </Stack>
+                ) : (
+                  <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 0.75, color: 'text.secondary', flexWrap: 'wrap', rowGap: 0.5 }}>
+                    <Stack direction="row" spacing={0.75} alignItems="center">
+                      <GroupTypeIcon type={group.type} size={16} />
+                      <Typography variant="body2" color="text.secondary">
+                        {GROUP_TYPE_LABELS[group.type]}
+                      </Typography>
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary" aria-hidden>
+                      ·
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {group.currency}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" aria-hidden>
+                      ·
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      You are {data ? ROLE_LABELS[data.role].toLowerCase() : ''}
+                    </Typography>
+                    <AvatarStack members={group.members} total={group.memberCount} size={24} />
+                  </Stack>
+                )}
               </>
             )}
           </Box>
@@ -99,11 +125,11 @@ export default function GroupLayout() {
         </Stack>
         <Stack direction="row" alignItems="center" sx={{ borderTop: 1, borderColor: 'divider', pl: { xs: 0.5, md: 1.5 }, pr: 1 }}>
           <Tabs value={current} variant="scrollable" scrollButtons={false} aria-label="Group sections" sx={{ flex: 1, minWidth: 0 }}>
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <Tab key={t.path} label={t.label} value={t.path} component={RouterLink} to={t.path ? `${base}/${t.path}` : base} sx={{ px: 1.5, minWidth: 0 }} />
             ))}
           </Tabs>
-          <Tooltip title="Group settings">
+          <Tooltip title={isDirect ? 'Settings' : 'Group settings'}>
             <IconButton component={RouterLink} to={`${base}/settings`} aria-label="Group settings" color={sub === 'settings' ? 'primary' : 'default'}>
               <Settings size={19} />
             </IconButton>

@@ -108,7 +108,7 @@ function ExpenseDialogBody({ session, onClose, onBusyChange }: { session: Sessio
     if (!group) return null;
     if (sourceId) {
       if (!source) return null;
-      return mode === 'duplicate' ? initialFromExpense(source, { date: todayLocal() }) : initialFromExpense(source);
+      return mode === 'duplicate' ? initialFromExpense(source, { date: todayLocal(), repeat: 'NONE' }) : initialFromExpense(source);
     }
     return defaultInitial(group, session.planId);
     // formKey forces a rebuild after "Load latest version".
@@ -294,6 +294,7 @@ export function defaultInitial(group: GroupDetail, planId?: string): ExpenseForm
       category: DEFAULT_CATEGORIES[0]!.id,
       planId: planId ?? '',
       notes: '',
+      repeat: 'NONE',
     },
     payers: { multiple: false, payerId: me?.id ?? active[0] ?? '', amounts: {} },
     split: emptySplitDraft(active),

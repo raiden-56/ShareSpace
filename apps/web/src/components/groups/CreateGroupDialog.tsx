@@ -2,13 +2,16 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert,
+  Box,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   MenuItem,
   Stack,
+  Switch,
   TextField,
   Typography,
   useMediaQuery,
@@ -38,6 +41,7 @@ export function CreateGroupDialog() {
   const [description, setDescription] = useState('');
   const [members, setMembers] = useState<MemberDraft[]>([]);
   const [budget, setBudget] = useState('');
+  const [simplifyDebts, setSimplifyDebts] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [created, setCreated] = useState<{ groupId: string; invites: CreatedInvite[] } | null>(null);
@@ -49,6 +53,7 @@ export function CreateGroupDialog() {
     setDescription('');
     setMembers([]);
     setBudget('');
+    setSimplifyDebts(true);
     setError(null);
     setTouched(false);
     setCreated(null);
@@ -72,6 +77,7 @@ export function CreateGroupDialog() {
         currency,
         members: cleanDrafts(members),
         budgetMinor: budgetMinor ?? null,
+        simplifyDebts,
       }).unwrap();
       dispatch(showToast({ message: `${res.group.name} created` }));
       if (res.invitations.length > 0) setCreated({ groupId: res.group.id, invites: res.invitations });
@@ -128,6 +134,20 @@ export function CreateGroupDialog() {
               />
             </Stack>
             <TextField label="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} multiline minRows={2} slotProps={{ htmlInput: { maxLength: 500 } }} />
+            <FormControlLabel
+              control={<Switch checked={simplifyDebts} onChange={(e) => setSimplifyDebts(e.target.checked)} />}
+              label={
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Simplify debts
+                  </Typography>
+                  <Typography variant="caption" component="p">
+                    Suggest the fewest repayments. You can change this later in group settings.
+                  </Typography>
+                </Box>
+              }
+              sx={{ alignItems: 'flex-start', mr: 0, '& .MuiSwitch-root': { mt: -0.5 } }}
+            />
             <div>
               <Typography variant="subtitle2" component="p" sx={{ mb: 1 }}>
                 People (optional)

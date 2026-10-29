@@ -13,12 +13,16 @@ import {
   getCurrency,
   isoDateSchema,
   MAX_MINOR,
+  occurrenceDate,
   parseAmountToMinor,
   parseRate,
+  REPEAT_INTERVALS,
+  REPEAT_LABELS,
   type ExpenseInput,
 } from '@sharespace/core';
 import { toApiError, useCreateCategoryMutation } from '../../api/api';
 import type { GroupDetail, Member, PlanSummary } from '../../api/types';
+import { useFormat } from '../../hooks/useAuth';
 import { ACCEPTED_UPLOAD_TYPES, formatBytes, validateUpload } from '../../lib/upload';
 import { CategoryIcon } from '../common/Indicators';
 import { PayerEditor } from './PayerEditor';
@@ -48,6 +52,7 @@ function makeSchema(groupCurrency: string) {
       category: z.string().min(1, 'Choose a category'),
       planId: z.string(),
       notes: z.string().max(2000, 'Use at most 2000 characters'),
+      repeat: z.enum(REPEAT_INTERVALS),
     })
     .superRefine((v, ctx) => {
       const { decimals } = getCurrency(v.currency);
@@ -83,6 +88,7 @@ export function ExpenseForm({ formId, group, plans, initial, onSubmit, disabled,
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [createCategory, { isLoading: creatingCategory }] = useCreateCategoryMutation();
   const statusRef = useRef<HTMLDivElement>(null);
+  const fmt = useFormat();
 
   // Active members plus anyone already on this expense (so editing never drops a former member silently).
   const members: Member[] = useMemo(() => {
@@ -95,6 +101,9 @@ export function ExpenseForm({ formId, group, plans, initial, onSubmit, disabled,
   const currency = watch('currency');
   const amountText = watch('amount');
   const fxRate = watch('fxRate');
+  const repeat = watch('repeat');
+  const dateText = watch('date');
+  const nextRepeat = repeat !== 'NONE' && /^\d{4}-\d{2}-\d{2}$/.test(dateText ?? '') ? occurrenceDate(dateText, repeat, 1) : null;
   const { decimals, symbol } = getCurrency(currency);
   const totalMinor = parseAmountToMinor(amountText ?? '', decimals);
   const splitPreview = buildSplit(split, totalMinor, currency, memberOrder, nameOf);
@@ -127,6 +136,7 @@ export function ExpenseForm({ formId, group, plans, initial, onSubmit, disabled,
         planId: values.planId || null,
         payers: p.payers,
         split: s.split,
+        repeat: values.repeat,
       },
       receipt,
     );
@@ -275,6 +285,29 @@ export function ExpenseForm({ formId, group, plans, initial, onSubmit, disabled,
             </IconButton>
           </Stack>
         )}
+
+        <Controller
+          control={control}
+          name="repeat"
+          render={({ field }) => (
+            <TextField
+              select
+              label="Repeat"
+              {...field}
+              helperText={
+                nextRepeat
+                  ? `Next added on ${fmt.date(nextRepeat)}. Repeats are added automatically the next time someone opens ShareSpace on or after that day.`
+                  : 'Use for rent, subscriptions and other regular bills.'
+              }
+            >
+              {REPEAT_INTERVALS.map((r) => (
+                <MenuItem key={r} value={r}>
+                  {REPEAT_LABELS[r]}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
+        />
 
         <Divider />
         <Box>

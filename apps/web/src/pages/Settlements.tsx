@@ -8,6 +8,7 @@ import { BalanceLabel } from '../components/common/Money';
 import { SettlementListSkeleton } from '../components/common/Skeletons';
 import { EmptyState, ErrorState } from '../components/common/States';
 import { SettlementHistory, SuggestionRow } from '../components/settlements/SettlementParts';
+import { SimplifyModeLabel } from '../components/groups/SimplifyDebts';
 
 export default function Settlements() {
   const { data, error, isLoading, refetch } = useSettlementsOverviewQuery();
@@ -54,6 +55,7 @@ export default function Settlements() {
                         <Typography variant="h3" component="h2">
                           {g.groupName}
                         </Typography>
+                        <SimplifyModeLabel simplified={g.simplifyDebts} variant="caption" />
                         <Button component={RouterLink} to={`/groups/${g.groupId}/balances`} size="small" endIcon={<ArrowRight size={14} />} sx={{ px: 0, minHeight: 28 }}>
                           Balances and history
                         </Button>

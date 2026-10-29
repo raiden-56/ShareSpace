@@ -29,6 +29,11 @@ test('pages have no horizontal overflow at supported widths', async ({ page }) =
   await expect(page).toHaveURL(/onboarding/);
   await page.getByRole('button', { name: 'Skip for now' }).click();
   await expect(page).toHaveURL(/\/$/);
+  // New users get the guided tour on Overview. Skip it here (that is saved, so it stays closed).
+  const tour = page.getByRole('dialog', { name: 'Welcome to ShareSpace' });
+  await expect(tour).toBeVisible();
+  await tour.getByRole('button', { name: 'Skip tour' }).click();
+  await expect(tour).toBeHidden();
 
   // Seed realistic data through the API.
   const created = await api(page, 'POST', '/api/groups', {
@@ -81,6 +86,8 @@ test('pages have no horizontal overflow at supported widths', async ({ page }) =
     '/reports',
     '/notifications',
     '/settings',
+    '/friends',
+    '/help',
   ];
 
   const problems: string[] = [];
@@ -99,5 +106,26 @@ test('pages have no horizontal overflow at supported widths', async ({ page }) =
       }
     }
   }
+
+  // The tour card must stay inside 16px gutters, pointing at real navigation on phones and desktops.
+  for (const width of [360, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/help');
+    await page.getByRole('button', { name: 'Take the tour' }).click();
+    const welcome = page.getByRole('dialog', { name: 'Welcome to ShareSpace' });
+    await welcome.getByRole('button', { name: 'Next' }).click();
+    const groupsStep = page.getByRole('dialog', { name: 'Groups' });
+    await expect(groupsStep).toBeVisible();
+    await expect(page.getByTestId('tour-spotlight')).toBeVisible();
+    await page.waitForTimeout(300);
+    const box = (await groupsStep.boundingBox())!;
+    if (box.x < 15 || box.x + box.width > width - 15 || box.y < 15 || box.y + box.height > 900 - 15) {
+      problems.push(`${width}px tour card outside the gutters: ${JSON.stringify(box)}`);
+    }
+    await page.screenshot({ path: `test-results/screens/${width}_tour.png` });
+    await page.keyboard.press('Escape');
+    await expect(groupsStep).toBeHidden();
+  }
+
   expect(problems, problems.join('\n')).toEqual([]);
 });

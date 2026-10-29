@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { Alert, Box, Button, Card, CardContent, Chip, Divider, Link, Skeleton, Stack, Typography } from '@mui/material';
-import { ArrowLeft, CalendarDays, Copy, Pencil, RotateCcw, Trash2 } from 'lucide-react';
-import type { SplitMethod } from '@sharespace/core';
+import { ArrowLeft, CalendarDays, Copy, Pencil, Repeat, RotateCcw, Trash2 } from 'lucide-react';
+import { REPEAT_LABELS, type SplitMethod } from '@sharespace/core';
 import { toApiError, useDeleteExpenseMutation, useExpenseQuery, useRestoreExpenseMutation } from '../../api/api';
 import type { ExpenseDetail as Expense } from '../../api/types';
 import { useFormat } from '../../hooks/useAuth';
@@ -16,12 +16,14 @@ import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { ErrorState } from '../../components/common/States';
 import { PageTransition, SectionCard } from '../../components/common/Layout';
 import { CommentsSection, HistorySection, ReceiptsSection } from '../../components/expenses/ExpenseDetailSections';
+import { viewerPosition, viewerPositionColor, viewerPositionText } from '../../components/expenses/repeat';
 
 const METHOD_LABELS: Record<SplitMethod, string> = {
   EQUAL: 'Split equally',
   EXACT: 'Exact amounts',
   PERCENTAGE: 'By percentage',
   SHARES: 'By shares',
+  ADJUSTMENT: 'Split equally with adjustments',
   ITEMIZED: 'Itemized',
 };
 
@@ -33,6 +35,7 @@ function methodInput(e: Expense, inputValue: number | null, fmtMoney: (m: number
     const n = (inputValue / 100).toFixed(2).replace(/\.?0+$/, '');
     return `${n} ${n === '1' ? 'share' : 'shares'}`;
   }
+  if (e.splitMethod === 'ADJUSTMENT') return inputValue > 0 ? `includes +${fmtMoney(inputValue, e.originalCurrency)} adjustment` : null;
   return null;
 }
 
@@ -121,6 +124,38 @@ function AdjRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Repeating template: schedule and next date. Copy: where it came from. */
+function RepeatInfo({ expense: e, groupId }: { expense: Expense; groupId: string }) {
+  const fmt = useFormat();
+  let content: ReactNode = null;
+  if (e.repeatInterval !== 'NONE') {
+    const schedule = `Repeats ${REPEAT_LABELS[e.repeatInterval].toLowerCase()}`;
+    content = e.deletedAt
+      ? `${schedule} · paused while deleted`
+      : e.repeatNextDate
+        ? `${schedule} · next on ${fmt.date(e.repeatNextDate)}`
+        : schedule;
+  } else if (e.recurringSourceId) {
+    content = (
+      <>
+        Added automatically from a repeating expense ·{' '}
+        <Link component={RouterLink} to={`/groups/${groupId}/expenses/${e.recurringSourceId}`}>
+          View the original
+        </Link>
+      </>
+    );
+  }
+  if (!content) return null;
+  return (
+    <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mt: 1, color: 'text.secondary' }}>
+      <Repeat size={14} aria-hidden style={{ flexShrink: 0 }} />
+      <Typography variant="body2" component="p" color="text.secondary">
+        {content}
+      </Typography>
+    </Stack>
+  );
+}
+
 export default function ExpenseDetail() {
   const { expenseId = '' } = useParams();
   const { groupId, helpers } = useGroupContext();
@@ -144,6 +179,7 @@ export default function ExpenseDetail() {
   const e = data.expense;
   const canEdit = helpers.can('editRecords');
   const foreign = e.originalCurrency !== e.currency;
+  const position = helpers.me ? viewerPosition(e, helpers.me) : null;
 
   return (
     <PageTransition>
@@ -191,6 +227,7 @@ export default function ExpenseDetail() {
                 <Chip size="small" label={helpers.categoryName(e.category)} variant="outlined" />
                 {e.plan && <Chip size="small" label={`Plan: ${e.plan.title}`} component={RouterLink} to={`/groups/${groupId}/plans/${e.plan.id}`} clickable variant="outlined" />}
               </Stack>
+              <RepeatInfo expense={e} groupId={groupId} />
               <Typography variant="caption" component="p" sx={{ mt: 1 }}>
                 Added by {helpers.userName(e.createdById)} on {fmt.dateTime(e.createdAt)}
                 {e.updatedById && e.version > 1 ? ` · last changed by ${helpers.userName(e.updatedById)}` : ''}
@@ -198,6 +235,11 @@ export default function ExpenseDetail() {
             </Box>
             <Box sx={{ textAlign: { sm: 'right' } }}>
               <Money minor={e.amountMinor} currency={e.currency} variant="h1" component="p" />
+              {position && (
+                <Typography variant="subtitle2" component="p" className="tabular" sx={{ color: viewerPositionColor(position) }}>
+                  {viewerPositionText(position, (m) => fmt.money(m, e.currency))}
+                </Typography>
+              )}
               {foreign && (
                 <>
                   <Typography variant="body2" className="tabular">

@@ -28,6 +28,7 @@ import { downloadFile } from '../../lib/download';
 import { PageTransition, SectionCard } from '../../components/common/Layout';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { GroupTypePicker } from '../../components/groups/GroupFields';
+import { SimplifyDebtsControl } from '../../components/groups/SimplifyDebts';
 import { MemberListSkeleton } from '../../components/common/Skeletons';
 
 export default function GroupSettings() {
@@ -155,6 +156,10 @@ export default function GroupSettings() {
               </Button>
             )}
           </Stack>
+        </SectionCard>
+
+        <SectionCard title="Repayments" subtitle="How suggested repayments are worked out. Balances stay the same either way.">
+          <SimplifyDebtsControl groupId={groupId} value={g.simplifyDebts} editable={editable} />
         </SectionCard>
 
         <SectionCard title="Custom categories" subtitle="Add categories specific to this group. The default categories are always available.">

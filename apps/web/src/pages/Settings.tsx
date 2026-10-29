@@ -31,7 +31,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { Check, Download, Laptop, LogOut, Monitor, Moon, Smartphone, Sun } from 'lucide-react';
+import { Check, CircleHelp, Compass, Download, Laptop, LogOut, Monitor, Moon, Smartphone, Sun } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   ACCENTS,
@@ -63,6 +63,7 @@ import { PageHeader, PageTransition } from '../components/common/Layout';
 import { ErrorState } from '../components/common/States';
 import { MemberListSkeleton } from '../components/common/Skeletons';
 import { MemberAvatar } from '../components/common/MemberAvatar';
+import { useTour } from '../components/tour/tourContext';
 
 const SECTIONS = [
   { id: 'profile', label: 'Profile' },
@@ -603,9 +604,23 @@ export default function Settings() {
   const raw = params.get('section');
   const section: SectionId = SECTIONS.some((s) => s.id === raw) ? (raw as SectionId) : 'profile';
   const Current = SECTION_COMPONENTS[section];
+  const tour = useTour();
   return (
     <PageTransition>
-      <PageHeader title="Settings" subtitle="Manage your profile, preferences and data." />
+      <PageHeader
+        title="Settings"
+        subtitle="Manage your profile, preferences and data."
+        actions={
+          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            <Button variant="outlined" startIcon={<Compass size={18} />} onClick={tour.start}>
+              Replay the app tour
+            </Button>
+            <Button component={RouterLink} to="/help" startIcon={<CircleHelp size={18} />}>
+              Help & guide
+            </Button>
+          </Stack>
+        }
+      />
       <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: '1fr', md: '200px 1fr' }, alignItems: 'start' }}>
         <Tabs
           orientation={desktop ? 'vertical' : 'horizontal'}

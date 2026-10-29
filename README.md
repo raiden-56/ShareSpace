@@ -16,6 +16,7 @@ ShareSpace *records* payments made elsewhere (cash, bank transfer, UPI). It neve
 - Session list with per-session revoke and "sign out other sessions".
 - Account deletion.
 - First-run onboarding (create or join a group, type, people, currency, optional budget). Every nonessential step can be skipped.
+- A guided tooltip tour of the app for new users (replayable from Settings or Help), and a Help & guide page explaining every feature and how balances are calculated.
 
 **Groups**
 - Create, edit and archive/restore groups; set an accent colour, currency, multi-currency toggle and custom categories.
@@ -29,7 +30,9 @@ ShareSpace *records* payments made elsewhere (cash, bank transfer, UPI). It neve
 
 **Expenses**
 - Create, edit, duplicate, delete (soft) and restore expenses.
-- Split methods: equal, exact amounts, percentage, weighted shares, and itemized (quantity × unit price, per-item participants, tax/service/discount allocated proportionally).
+- Split methods: equal, exact amounts, percentage, weighted shares, adjustment (equal split plus extra amounts for specific people), and itemized (quantity × unit price, per-item participants, tax/service/discount allocated proportionally).
+- Repeating expenses (weekly, every 2 weeks, monthly, every 3 months, yearly). Month ends are handled (Jan 31 → Feb 28 → Mar 31). Each repeat is added once, even under concurrent requests.
+- Every expense shows what it means for you: "you lent ₹X" or "you borrowed ₹X".
 - Multiple payers per expense, with live share preview and exact validation messages.
 - Idempotent submissions: a client-generated key means retries never create duplicates.
 - Optimistic concurrency: conflicting edits are detected (HTTP 409) and never overwritten silently.
@@ -40,13 +43,21 @@ ShareSpace *records* payments made elsewhere (cash, bank transfer, UPI). It neve
 
 **Balances and settlements**
 - Net balance = paid − share + repayments sent − repayments received, computed from source records every time (nothing is cached, so nothing can be double-applied).
-- Settlement suggestions use a deterministic greedy algorithm: exact matches first, then largest debtor pays largest creditor.
+- All expenses and repayments in a group are netted: if you pay ₹200 and a friend pays ₹100, both split equally, the friend owes you ₹50 (or ₹100 if each paid entirely for the other).
+- **Simplify debts** (per group, on by default): suggestions use a deterministic greedy algorithm, exact matches first, then largest debtor pays largest creditor.
   - This takes at most n−1 transfers. The UI says plainly that it is not guaranteed to be the absolute minimum.
+  - Turned off, each debt stays between the two people it arose between ("who owes whom"), netted per pair.
 - Recording repayments:
   - Partial repayments are supported.
   - Methods: cash, bank transfer, UPI or a described "other".
   - Submissions are idempotent.
 - Recorded repayments are never deleted. They are *reversed* with a reason and stay in the history.
+
+**Friends**
+- One balance per person across every group you share, per currency (never converted).
+- Settle up with a friend in one step: the whole balance clears every shared group (offsetting groups where the debt runs the other way); a partial amount pays the largest debts first.
+- Expenses outside any group, kept in a private two-person group (friends with an account only).
+- In-app payment reminders to a friend who owes you, at most one per day.
 
 **Budgets, plans and decisions**
 - Group budgets:
@@ -214,17 +225,18 @@ The web app takes one optional variable, `API_URL` (dev/preview proxy target, de
 
 | Command | What it covers |
 |---|---|
-| `npm test --workspace @sharespace/core` | 58 unit tests (details below) |
-| `npm test --workspace @sharespace/server` | 19 API integration tests against `sharespace_test` (details below) |
-| `npm test --workspace @sharespace/web` | Component tests: expense form and split methods, filters, group creation, settlement confirmation, polls, checklist, charts, budget form, notifications, empty/loading/error states |
-| `npm run test:e2e` | Playwright: the 16-step workflow, plus a no-horizontal-overflow check of 17 pages at 360/390/768/1024/1280/1440 px |
+| `npm test --workspace @sharespace/core` | 74 unit tests (details below) |
+| `npm test --workspace @sharespace/server` | 31 API integration tests against `sharespace_test` (details below) |
+| `npm test --workspace @sharespace/web` | 86 component tests: expense form and split methods (incl. adjustment and repeat), lent/borrowed wording, filters, group creation, simplify debts, expenses outside groups, settlement confirmation, friends list and settle-up, guided tour and help page, polls, checklist, charts, budget form, notifications, empty/loading/error states |
+| `npm run test:e2e` | Playwright: the 16-step workflow; the friends flow (₹200 and ₹100 net to one ₹50 balance, settle up to zero); a no-horizontal-overflow check of 19 pages at 360/390/768/1024/1280/1440 px, plus the guided tour at 360 and 1440 px |
 | `npm run typecheck` | Strict TypeScript across all workspaces |
 
 **Core unit tests cover:**
 - Every split method and multiple payers.
 - One-paisa rounding, zero and negative rejection.
 - Net balances, partial settlements, reversals, deleted and edited expenses.
-- Settlement optimisation, including a randomized property check.
+- Settlement optimisation and "who owes whom" debts, each with a randomized property check.
+- Netting across expenses (the ₹200/₹100 example), split by adjustment, and repeat dates across month and year ends.
 - FX conversion, budgets, reports, CSV and schemas.
 
 **API integration tests cover:**
@@ -232,6 +244,8 @@ The web app takes one optional variable, `API_URL` (dev/preview proxy target, de
 - CSRF, idempotency and edit conflicts.
 - Soft delete/restore, settlement reversal and placeholder claiming.
 - Budget warnings, receipt content sniffing and polls.
+- Friends: balances across groups, settle-up across groups (full, partial, overpay rejected, idempotent), reminders, expenses outside groups.
+- Simplify debts on/off, split by adjustment, and repeating expenses created exactly once.
 
 **Setting up the test database:** before the first server/e2e run, create the test database once:
 
@@ -264,10 +278,10 @@ Tests apply migrations with `prisma migrate deploy`. They never reset or wipe a 
 - **Email is not configured.** Invitation links are shown to the inviter to share manually, and password-reset links are printed to the server console in development only. The UI never claims an email was sent. Notifications are in-app only (no email or push).
 - **Receipts** use local private disk storage (`STORAGE_DIR`). For multi-instance deployments, replace `apps/server/src/lib/storage.ts` with an S3/GCS implementation behind the same interface. There is no OCR.
 - **Exchange rates are manual.** No live-rate service is integrated.
-- **Reminders** (upcoming plans, poll deadlines) are generated when a user opens notifications or the dashboard, not by a background scheduler.
+- **Reminders and repeats are not scheduled in the background.** Upcoming-plan and poll-deadline reminders are generated when a user opens notifications or the dashboard; repeating expenses are added when anyone in the group uses the app (checked at most every 30 seconds per user). Dates use the server's UTC day.
 - **Not implemented in this release:**
   - Offline expense entry and sync (deliberately omitted rather than shipped unreliably).
-  - Recurring expenses and CSV import.
+  - CSV import (e.g. from Splitwise).
   - Changing your sign-in email; UI languages other than English.
   - The spec's backend-unavailable demo mode: the app always needs the API. `npm run db:seed` provides a clearly labelled demo account instead.
   - Cover images: group branding is an accent colour.

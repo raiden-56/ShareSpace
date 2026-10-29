@@ -21,6 +21,14 @@ async function register(page: Page, user: typeof alice) {
   await page.getByRole('button', { name: 'Create account' }).click();
 }
 
+/** New users get the guided tour on Overview; this flow does not use it, so skip it whenever it appears. */
+async function skipTourWhenShown(page: Page) {
+  const tour = page.getByRole('dialog', { name: 'Welcome to ShareSpace' });
+  await page.addLocatorHandler(tour, async () => {
+    await tour.getByRole('button', { name: 'Skip tour' }).click();
+  });
+}
+
 async function selectOption(page: Page, label: string, option: string | RegExp) {
   await page.getByRole('combobox', { name: label }).click();
   await page.getByRole('option', { name: option }).click();
@@ -33,6 +41,7 @@ async function openAddExpense(page: Page) {
 }
 
 test('core shared-expense workflow', async ({ page, browser }) => {
+  await skipTourWhenShown(page);
   // 1. Register and go through onboarding (create a group with members).
   await register(page, alice);
   await expect(page).toHaveURL(/\/onboarding/);
@@ -124,7 +133,9 @@ test('core shared-expense workflow', async ({ page, browser }) => {
   await page.getByRole('button', { name: 'New plan' }).first().click();
   await page.getByLabel('Title').fill('Beach day');
   await page.getByRole('button', { name: 'Create plan' }).click();
-  await page.getByRole('link', { name: /Beach day/ }).first().click();
+  // Creating a plan opens it.
+  await expect(page).toHaveURL(/\/plans\/[^/]+$/);
+  await expect(page.getByRole('heading', { name: 'Beach day' })).toBeVisible();
   await page.getByRole('tablist', { name: 'Plan sections' }).getByRole('tab', { name: 'Budget' }).click();
   await page.getByRole('button', { name: 'Add expense to this plan' }).first().click();
   dialog = page.getByRole('dialog', { name: 'Add expense' });
@@ -154,6 +165,7 @@ test('core shared-expense workflow', async ({ page, browser }) => {
   // 16. An unauthorized user cannot access the group.
   const otherContext = await browser.newContext();
   const other = await otherContext.newPage();
+  await skipTourWhenShown(other);
   await register(other, mallory);
   await expect(other).toHaveURL(/\/onboarding/);
   await other.getByRole('button', { name: 'Skip for now' }).click();

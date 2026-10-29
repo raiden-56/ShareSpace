@@ -157,7 +157,7 @@ export default function GroupOverview() {
               </SectionCard>
             )}
 
-            {placeholders > 0 && helpers.can('manageMembers') && (
+            {placeholders > 0 && helpers.can('manageMembers') && !helpers.data.group.isDirect && (
               <SectionCard>
                 <Stack direction="row" spacing={1.5} alignItems="center">
                   <Box sx={{ color: 'primary.main' }}>

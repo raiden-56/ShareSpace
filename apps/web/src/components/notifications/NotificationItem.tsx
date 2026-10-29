@@ -1,6 +1,7 @@
 import { Box, ButtonBase, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import {
   Bell,
+  BellRing,
   CalendarClock,
   HandCoins,
   MailOpen,
@@ -23,6 +24,7 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
   EXPENSE_DELETED: Receipt,
   COMMENT: MessageSquare,
   SETTLEMENT: HandCoins,
+  PAYMENT_REMINDER: BellRing,
   BUDGET_WARNING: TriangleAlert,
   PLAN_UPCOMING: CalendarClock,
   POLL_DEADLINE: Vote,

@@ -28,7 +28,7 @@ import {
   useTheme,
   LinearProgress,
 } from '@mui/material';
-import { LogOut, PanelLeftClose, PanelLeftOpen, Plus, Search, Bell, Settings, Users, Ellipsis } from 'lucide-react';
+import { LogOut, PanelLeftClose, PanelLeftOpen, Plus, Search, Bell, Settings, Users, Ellipsis, CircleHelp } from 'lucide-react';
 import { api, useGroupQuery, useLogoutMutation, useUnreadCountQuery } from '../../api/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppDispatch, useAppSelector } from '../../store';
@@ -40,11 +40,13 @@ import { ExpenseDialog } from '../expenses/ExpenseDialog';
 import { SettleDialog } from '../settlements/SettleDialog';
 import { CreateGroupDialog } from '../groups/CreateGroupDialog';
 import { SearchDialog } from '../search/SearchDialog';
+import { TourProvider } from '../tour/TourProvider';
 
 const SIDEBAR_WIDTH = 248;
-const OverviewIcon = MAIN_NAV[0]!.icon;
-const GroupsIcon = MAIN_NAV[1]!.icon;
-const SettleIcon = MAIN_NAV[3]!.icon;
+const navIcon = (to: string) => MAIN_NAV.find((n) => n.to === to)!.icon;
+const OverviewIcon = navIcon('/');
+const GroupsIcon = navIcon('/groups');
+const FriendsIcon = navIcon('/friends');
 const SIDEBAR_COLLAPSED = 76;
 
 function useHeaderTitle(): string {
@@ -93,6 +95,7 @@ function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; onNavig
                 to={item.to}
                 selected={active}
                 onClick={onNavigate}
+                data-tour={`nav-${item.to.slice(1) || 'overview'}`}
                 aria-current={active ? 'page' : undefined}
                 sx={{
                   minHeight: 42,
@@ -161,6 +164,17 @@ function UserMenu() {
           Settings
         </MenuItem>
         <MenuItem
+          onClick={() => {
+            setAnchor(null);
+            navigate('/help');
+          }}
+        >
+          <ListItemIcon>
+            <CircleHelp size={18} />
+          </ListItemIcon>
+          Help & guide
+        </MenuItem>
+        <MenuItem
           onClick={async () => {
             setAnchor(null);
             await logout().unwrap().catch(() => undefined);
@@ -183,7 +197,7 @@ function NotificationButton() {
   const count = data?.unreadCount ?? 0;
   return (
     <Tooltip title="Notifications">
-      <IconButton component={RouterLink} to="/notifications" aria-label={count ? `Notifications, ${count} unread` : 'Notifications'}>
+      <IconButton component={RouterLink} to="/notifications" data-tour="notifications" aria-label={count ? `Notifications, ${count} unread` : 'Notifications'}>
         <Badge color="secondary" badgeContent={count} max={99}>
           <Bell size={20} />
         </Badge>
@@ -240,190 +254,194 @@ export function AppShell({ children }: { children: ReactNode }) {
   const mobileValue = MOBILE_PRIMARY.find((p) => (p === '/' ? pathname === '/' : pathname.startsWith(p))) ?? (moreOpen ? 'more' : false);
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100dvh', bgcolor: 'background.default' }}>
-      <a href="#main" className="skip-link">
-        Skip to content
-      </a>
-      {desktop && (
-        <Drawer
-          variant="permanent"
-          sx={{
-            width: sidebarWidth,
-            flexShrink: 0,
-            '& .MuiDrawer-paper': {
+    <TourProvider>
+      <Box sx={{ display: 'flex', minHeight: '100dvh', bgcolor: 'background.default' }}>
+        <a href="#main" className="skip-link">
+          Skip to content
+        </a>
+        {desktop && (
+          <Drawer
+            variant="permanent"
+            sx={{
               width: sidebarWidth,
-              boxSizing: 'border-box',
-              borderRight: 1,
-              borderColor: 'divider',
-              bgcolor: 'background.paper',
-              overflowX: 'hidden',
-              transition: theme.transitions.create('width', { duration: 180 }),
-            },
-          }}
-        >
-          <SidebarContent collapsed={collapsed} />
-        </Drawer>
-      )}
+              flexShrink: 0,
+              '& .MuiDrawer-paper': {
+                width: sidebarWidth,
+                boxSizing: 'border-box',
+                borderRight: 1,
+                borderColor: 'divider',
+                bgcolor: 'background.paper',
+                overflowX: 'hidden',
+                transition: theme.transitions.create('width', { duration: 180 }),
+              },
+            }}
+          >
+            <SidebarContent collapsed={collapsed} />
+          </Drawer>
+        )}
 
-      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <AppBar position="sticky" color="inherit" elevation={0} sx={{ bgcolor: 'background.default', borderBottom: 1, borderColor: 'divider', backdropFilter: 'saturate(1.2)' }}>
-          <Toolbar sx={{ gap: 1, minHeight: { xs: 56, md: 64 }, px: { xs: 1.5, md: 3 } }}>
-            {desktop ? (
-              <Tooltip title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
-                <IconButton onClick={() => dispatch(toggleSidebar())} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} edge="start">
-                  {collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <AppBar position="sticky" color="inherit" elevation={0} sx={{ bgcolor: 'background.default', borderBottom: 1, borderColor: 'divider', backdropFilter: 'saturate(1.2)' }}>
+            <Toolbar sx={{ gap: 1, minHeight: { xs: 56, md: 64 }, px: { xs: 1.5, md: 3 } }}>
+              {desktop ? (
+                <Tooltip title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+                  <IconButton onClick={() => dispatch(toggleSidebar())} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} edge="start">
+                    {collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+                  </IconButton>
+                </Tooltip>
+              ) : (
+                <RouterLink to="/" aria-label="ShareSpace home" style={{ display: 'flex', color: 'inherit', textDecoration: 'none' }}>
+                  <Logo compact />
+                </RouterLink>
+              )}
+              <Typography variant="h3" component="p" noWrap sx={{ flex: 1, minWidth: 0, ml: { xs: 0.5, md: 0.5 } }}>
+                {title}
+              </Typography>
+              {desktop ? (
+                <ButtonBase
+                  onClick={() => dispatch(setSearchOpen(true))}
+                  aria-label="Search (Ctrl+K)"
+                  data-tour="search"
+                  sx={{
+                    width: { md: 220, lg: 300 },
+                    height: 40,
+                    px: 1.5,
+                    gap: 1,
+                    justifyContent: 'flex-start',
+                    borderRadius: 2.5,
+                    border: 1,
+                    borderColor: 'divider',
+                    bgcolor: 'background.paper',
+                    color: 'text.secondary',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  <Search size={17} />
+                  <Box component="span" sx={{ flex: 1, textAlign: 'left' }}>
+                    Search
+                  </Box>
+                  <Box component="kbd" sx={{ fontFamily: 'inherit', fontSize: '0.7rem', px: 0.75, py: 0.1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                    Ctrl K
+                  </Box>
+                </ButtonBase>
+              ) : (
+                <IconButton onClick={() => dispatch(setSearchOpen(true))} aria-label="Search" data-tour="search">
+                  <Search size={20} />
                 </IconButton>
-              </Tooltip>
-            ) : (
-              <RouterLink to="/" aria-label="ShareSpace home" style={{ display: 'flex', color: 'inherit', textDecoration: 'none' }}>
-                <Logo compact />
-              </RouterLink>
-            )}
-            <Typography variant="h3" component="p" noWrap sx={{ flex: 1, minWidth: 0, ml: { xs: 0.5, md: 0.5 } }}>
-              {title}
-            </Typography>
-            {desktop ? (
-              <ButtonBase
-                onClick={() => dispatch(setSearchOpen(true))}
-                aria-label="Search (Ctrl+K)"
-                sx={{
-                  width: { md: 220, lg: 300 },
-                  height: 40,
-                  px: 1.5,
-                  gap: 1,
-                  justifyContent: 'flex-start',
-                  borderRadius: 2.5,
-                  border: 1,
-                  borderColor: 'divider',
-                  bgcolor: 'background.paper',
-                  color: 'text.secondary',
-                  fontSize: '0.875rem',
-                }}
-              >
-                <Search size={17} />
-                <Box component="span" sx={{ flex: 1, textAlign: 'left' }}>
-                  Search
-                </Box>
-                <Box component="kbd" sx={{ fontFamily: 'inherit', fontSize: '0.7rem', px: 0.75, py: 0.1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                  Ctrl K
-                </Box>
-              </ButtonBase>
-            ) : (
-              <IconButton onClick={() => dispatch(setSearchOpen(true))} aria-label="Search">
-                <Search size={20} />
-              </IconButton>
-            )}
-            <NotificationButton />
-            {desktop && (
-              <Button variant="contained" startIcon={<Plus size={18} />} onClick={quickAdd} sx={{ ml: 0.5 }}>
-                Add expense
-              </Button>
-            )}
-            <UserMenu />
-          </Toolbar>
-        </AppBar>
+              )}
+              <NotificationButton />
+              {desktop && (
+                <Button variant="contained" startIcon={<Plus size={18} />} onClick={quickAdd} sx={{ ml: 0.5 }} data-tour="add-expense">
+                  Add expense
+                </Button>
+              )}
+              <UserMenu />
+            </Toolbar>
+          </AppBar>
 
-        <Box
-          component="main"
-          id="main"
-          tabIndex={-1}
-          sx={{
-            flex: 1,
-            width: '100%',
-            maxWidth: 1240,
-            mx: 'auto',
-            px: { xs: 2, sm: 3, md: 4 },
-            pt: { xs: 2.5, md: 3.5 },
-            pb: { xs: 'calc(96px + env(safe-area-inset-bottom))', md: 6 },
-            outline: 'none',
-            overflowX: 'clip',
-          }}
-        >
-          <Suspense fallback={<LinearProgress aria-label="Loading page" sx={{ maxWidth: 240, mx: 'auto', mt: 8 }} />}>{children}</Suspense>
+          <Box
+            component="main"
+            id="main"
+            tabIndex={-1}
+            sx={{
+              flex: 1,
+              width: '100%',
+              maxWidth: 1240,
+              mx: 'auto',
+              px: { xs: 2, sm: 3, md: 4 },
+              pt: { xs: 2.5, md: 3.5 },
+              pb: { xs: 'calc(96px + env(safe-area-inset-bottom))', md: 6 },
+              outline: 'none',
+              overflowX: 'clip',
+            }}
+          >
+            <Suspense fallback={<LinearProgress aria-label="Loading page" sx={{ maxWidth: 240, mx: 'auto', mt: 8 }} />}>{children}</Suspense>
+          </Box>
         </Box>
-      </Box>
 
-      {!desktop && (
-        <Paper
-          component="nav"
-          aria-label="Primary"
-          elevation={0}
-          sx={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: (t) => t.zIndex.appBar, borderTop: 1, borderColor: 'divider', pb: 'env(safe-area-inset-bottom)' }}
-        >
-          <BottomNavigation
-            showLabels
-            value={mobileValue}
-            onChange={(_e, value: string) => {
-              if (value === 'add') quickAdd();
-              else if (value === 'more') setMoreOpen(true);
-              else navigate(value);
-            }}
-            sx={{ height: 64, bgcolor: 'background.paper', '& .MuiBottomNavigationAction-root': { minWidth: 0, px: 0.5 }, '& .Mui-selected': { fontWeight: 700 } }}
+        {!desktop && (
+          <Paper
+            component="nav"
+            aria-label="Primary"
+            elevation={0}
+            sx={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: (t) => t.zIndex.appBar, borderTop: 1, borderColor: 'divider', pb: 'env(safe-area-inset-bottom)' }}
           >
-            <BottomNavigationAction label="Overview" value="/" icon={<OverviewIcon size={22} />} />
-            <BottomNavigationAction label="Groups" value="/groups" icon={<GroupsIcon size={22} />} />
-            <BottomNavigationAction
-              label="Add"
-              value="add"
-              aria-label="Add expense"
-              icon={
-                <Box sx={{ width: 44, height: 44, mt: -0.5, borderRadius: '14px', display: 'grid', placeItems: 'center', bgcolor: 'primary.main', color: 'primary.contrastText' }}>
-                  <Plus size={24} />
-                </Box>
-              }
-              sx={{ '& .MuiBottomNavigationAction-label': { mt: 0.25 } }}
-            />
-            <BottomNavigationAction label="Settle up" value="/settlements" icon={<SettleIcon size={22} />} />
-            <BottomNavigationAction label="More" value="more" icon={<Ellipsis size={22} />} />
-          </BottomNavigation>
-        </Paper>
-      )}
+            <BottomNavigation
+              showLabels
+              value={mobileValue}
+              onChange={(_e, value: string) => {
+                if (value === 'add') quickAdd();
+                else if (value === 'more') setMoreOpen(true);
+                else navigate(value);
+              }}
+              sx={{ height: 64, bgcolor: 'background.paper', '& .MuiBottomNavigationAction-root': { minWidth: 0, px: 0.5 }, '& .Mui-selected': { fontWeight: 700 } }}
+            >
+              <BottomNavigationAction label="Overview" value="/" icon={<OverviewIcon size={22} />} />
+              <BottomNavigationAction label="Groups" value="/groups" icon={<GroupsIcon size={22} />} data-tour="bottom-groups" />
+              <BottomNavigationAction
+                label="Add"
+                value="add"
+                aria-label="Add expense"
+                data-tour="bottom-add"
+                icon={
+                  <Box sx={{ width: 44, height: 44, mt: -0.5, borderRadius: '14px', display: 'grid', placeItems: 'center', bgcolor: 'primary.main', color: 'primary.contrastText' }}>
+                    <Plus size={24} />
+                  </Box>
+                }
+                sx={{ '& .MuiBottomNavigationAction-label': { mt: 0.25 } }}
+              />
+              <BottomNavigationAction label="Friends" value="/friends" icon={<FriendsIcon size={22} />} data-tour="bottom-friends" />
+              <BottomNavigationAction label="More" value="more" icon={<Ellipsis size={22} />} data-tour="more-button" />
+            </BottomNavigation>
+          </Paper>
+        )}
 
-      <Drawer anchor="bottom" open={moreOpen} onClose={() => setMoreOpen(false)} slotProps={{ paper: { sx: { borderTopLeftRadius: 20, borderTopRightRadius: 20, pb: 'env(safe-area-inset-bottom)' } } }}>
-        <Box sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: 'divider', mx: 'auto', mt: 1.25 }} aria-hidden />
-        <List sx={{ p: 1.5 }} aria-label="More destinations">
-          {MAIN_NAV.filter((n) => !MOBILE_PRIMARY.includes(n.to)).map((item) => (
-            <ListItemButton key={item.to} component={RouterLink} to={item.to} onClick={() => setMoreOpen(false)} selected={isActive(item, pathname)} sx={{ minHeight: 48 }}>
+        <Drawer anchor="bottom" open={moreOpen} onClose={() => setMoreOpen(false)} slotProps={{ paper: { sx: { borderTopLeftRadius: 20, borderTopRightRadius: 20, pb: 'env(safe-area-inset-bottom)' } } }}>
+          <Box sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: 'divider', mx: 'auto', mt: 1.25 }} aria-hidden />
+          <List sx={{ p: 1.5 }} aria-label="More destinations">
+            {MAIN_NAV.filter((n) => !MOBILE_PRIMARY.includes(n.to)).map((item) => (
+              <ListItemButton key={item.to} component={RouterLink} to={item.to} onClick={() => setMoreOpen(false)} selected={isActive(item, pathname)} sx={{ minHeight: 48 }}>
+                <ListItemIcon sx={{ minWidth: 40 }}>
+                  <item.icon size={20} />
+                </ListItemIcon>
+                <ListItemText primary={item.label} />
+              </ListItemButton>
+            ))}
+            <ListItemButton
+              onClick={() => {
+                setMoreOpen(false);
+                dispatch(setCreateGroupOpen(true));
+              }}
+              sx={{ minHeight: 48 }}
+            >
               <ListItemIcon sx={{ minWidth: 40 }}>
-                <item.icon size={20} />
+                <Users size={20} />
               </ListItemIcon>
-              <ListItemText primary={item.label} />
+              <ListItemText primary="Create group" />
             </ListItemButton>
-          ))}
-          <ListItemButton
-            onClick={() => {
-              setMoreOpen(false);
-              dispatch(setCreateGroupOpen(true));
-            }}
-            sx={{ minHeight: 48 }}
-          >
-            <ListItemIcon sx={{ minWidth: 40 }}>
-              <Users size={20} />
-            </ListItemIcon>
-            <ListItemText primary="Create group" />
-          </ListItemButton>
-        </List>
-      </Drawer>
+          </List>
+        </Drawer>
 
-      <ExpenseDialog />
-      <SettleDialog />
-      <CreateGroupDialog />
-      <SearchDialog />
-      <Snackbar
-        key={toast?.id}
-        open={!!toast}
-        autoHideDuration={toast?.severity === 'error' ? 6000 : 3500}
-        onClose={(_e, reason) => reason !== 'clickaway' && dispatch(clearToast())}
-        anchorOrigin={{ vertical: 'bottom', horizontal: desktop ? 'left' : 'center' }}
-        sx={{ bottom: { xs: 88, md: 24 } }}
-      >
-        {toast ? (
-          <Alert severity={toast.severity} variant="filled" onClose={() => dispatch(clearToast())} sx={{ width: '100%', bgcolor: toast.severity === 'success' ? 'primary.dark' : undefined }}>
-            {toast.message}
-          </Alert>
-        ) : undefined}
-      </Snackbar>
-    </Box>
+        <ExpenseDialog />
+        <SettleDialog />
+        <CreateGroupDialog />
+        <SearchDialog />
+        <Snackbar
+          key={toast?.id}
+          open={!!toast}
+          autoHideDuration={toast?.severity === 'error' ? 6000 : 3500}
+          onClose={(_e, reason) => reason !== 'clickaway' && dispatch(clearToast())}
+          anchorOrigin={{ vertical: 'bottom', horizontal: desktop ? 'left' : 'center' }}
+          sx={{ bottom: { xs: 88, md: 24 } }}
+        >
+          {toast ? (
+            <Alert severity={toast.severity} variant="filled" onClose={() => dispatch(clearToast())} sx={{ width: '100%', bgcolor: toast.severity === 'success' ? 'primary.dark' : undefined }}>
+              {toast.message}
+            </Alert>
+          ) : undefined}
+        </Snackbar>
+      </Box>
+    </TourProvider>
   );
 }
 

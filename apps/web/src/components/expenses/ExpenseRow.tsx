@@ -1,14 +1,15 @@
 import { Link as RouterLink } from 'react-router-dom';
 import { Box, ButtonBase, Stack, Typography } from '@mui/material';
-import { MessageSquare, Paperclip } from 'lucide-react';
+import { MessageSquare, Paperclip, Repeat } from 'lucide-react';
 import type { ExpenseSummary } from '../../api/types';
 import { useFormat } from '../../hooks/useAuth';
 import { CategoryIcon } from '../common/Indicators';
 import { Money } from '../common/Money';
+import { repeatBadge, viewerPosition, viewerPositionColor, viewerPositionText } from './repeat';
 
 interface ExpenseRowProps {
   expense: ExpenseSummary;
-  /** Member id of the signed-in user in this expense's group (for "your share"). */
+  /** Member id of the signed-in user in this expense's group (for "you lent / you borrowed"). */
   myMemberId?: string | null;
   memberName: (id: string) => string;
   categoryName: (id: string) => string;
@@ -16,13 +17,15 @@ interface ExpenseRowProps {
   context?: string;
 }
 
-/** One expense in a list: title, payer, date, category, amount and the viewer's share. Links to details. */
+/** One expense in a list: title, payer, date, category, amount and what the viewer lent or borrowed. Links to details. */
 export function ExpenseRow({ expense, myMemberId, memberName, categoryName, context }: ExpenseRowProps) {
   const fmt = useFormat();
   const payers = expense.payers.map((p) => memberName(p.memberId));
   const payerText = payers.length > 1 ? `${payers[0]} +${payers.length - 1}` : (payers[0] ?? '');
-  const myShare = myMemberId ? (expense.shares.find((s) => s.memberId === myMemberId)?.amountMinor ?? 0) : null;
-  const myPaid = myMemberId ? (expense.payers.find((p) => p.memberId === myMemberId)?.amountMinor ?? 0) : 0;
+  // Payer and share amounts are always in the group currency, so this is correct for foreign expenses too.
+  const position = myMemberId ? viewerPosition(expense, myMemberId) : null;
+  const positionText = position ? viewerPositionText(position, (m) => fmt.money(m, expense.currency)) : null;
+  const repeat = repeatBadge(expense);
   const foreign = expense.originalCurrency !== expense.currency;
 
   return (
@@ -30,7 +33,7 @@ export function ExpenseRow({ expense, myMemberId, memberName, categoryName, cont
       component={RouterLink}
       to={`/groups/${expense.groupId}/expenses/${expense.id}`}
       sx={{ display: 'flex', width: '100%', textAlign: 'left', py: 1.5, px: 1, mx: -1, borderRadius: 2.5, gap: 1.75, alignItems: 'center', '&:hover': { bgcolor: 'action.hover' } }}
-      aria-label={`${expense.title}, ${fmt.money(expense.amountMinor, expense.currency)}, paid by ${payerText}`}
+      aria-label={[`${expense.title}, ${fmt.money(expense.amountMinor, expense.currency)}, paid by ${payerText}`, positionText, repeat].filter(Boolean).join('. ')}
     >
       <CategoryIcon category={expense.category} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -44,6 +47,14 @@ export function ExpenseRow({ expense, myMemberId, memberName, categoryName, cont
           {expense.attachmentCount > 0 && <Paperclip size={12} aria-label="Has receipt" />}
           {expense.commentCount > 0 && <MessageSquare size={12} aria-label={`${expense.commentCount} comments`} />}
         </Stack>
+        {repeat && (
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: 'text.secondary' }}>
+            <Repeat size={12} aria-hidden />
+            <Typography variant="caption" component="span" noWrap>
+              {repeat}
+            </Typography>
+          </Stack>
+        )}
       </Box>
       <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
         <Money minor={expense.amountMinor} currency={expense.currency} sx={{ display: 'block', fontSize: '0.95rem' }} />
@@ -52,13 +63,9 @@ export function ExpenseRow({ expense, myMemberId, memberName, categoryName, cont
             {fmt.money(expense.originalAmountMinor, expense.originalCurrency)}
           </Typography>
         )}
-        {myShare !== null && !foreign && (
-          <Typography variant="caption" component="div" className="tabular" sx={{ color: myPaid - myShare > 0 ? 'money.positive' : myShare > 0 ? 'money.negative' : 'text.secondary' }}>
-            {myShare === 0 && myPaid === 0
-              ? 'Not involved'
-              : myPaid - myShare > 0
-                ? `You lent ${fmt.money(myPaid - myShare, expense.currency)}`
-                : `Your share ${fmt.money(myShare, expense.currency)}`}
+        {position && (
+          <Typography variant="caption" component="div" className="tabular" sx={{ color: viewerPositionColor(position), fontWeight: position.kind === 'lent' || position.kind === 'borrowed' ? 600 : 400 }}>
+            {positionText}
           </Typography>
         )}
       </Box>

@@ -12,6 +12,7 @@ import {
   validatePayers,
   type ItemizedBreakdown,
   type PayerInput,
+  type RepeatInterval,
   type SplitMethod,
   type SplitPayload,
 } from '@sharespace/core';
@@ -33,6 +34,8 @@ export interface SplitDraft {
   exact: Record<string, string>;
   percent: Record<string, string>;
   shares: Record<string, string>;
+  /** ADJUSTMENT: extra amount each person pays on top of an equal share (blank = none). */
+  adjustment: Record<string, string>;
   items: ItemDraft[];
   tax: string;
   service: string;
@@ -66,6 +69,7 @@ export function emptySplitDraft(participantIds: string[]): SplitDraft {
     exact: {},
     percent: {},
     shares: Object.fromEntries(participantIds.map((id) => [id, '1'])),
+    adjustment: {},
     items: [newItem(participantIds)],
     tax: '',
     service: '',
@@ -133,6 +137,13 @@ export function buildSplit(
         participants.push({ memberId: id, value: v });
       }
       break;
+    case 'ADJUSTMENT':
+      for (const id of ids) {
+        const v = parseOptionalAmount(draft.adjustment[id] ?? '', decimals);
+        if (v === null) return { ok: false, tone: 'error', message: `Enter a valid adjustment for ${nameOf(id)} (up to ${decimals} decimal places).` };
+        participants.push({ memberId: id, value: v });
+      }
+      break;
     case 'ITEMIZED': {
       items = [];
       for (const [i, item] of draft.items.entries()) {
@@ -164,6 +175,9 @@ export function buildSplit(
           tone: 'error',
           message: diff > 0 ? `Items and charges are ${money(diff)} less than the amount.` : `Items and charges are ${money(-diff)} more than the amount.`,
         };
+      }
+      if (draft.method === 'ADJUSTMENT') {
+        return { ok: false, tone: 'error', message: `Adjustments are ${money(-diff)} more than the total.` };
       }
       return { ok: false, tone: 'error', message: diff > 0 ? `${money(diff)} left to assign.` : `${money(-diff)} over the total.` };
     }
@@ -231,6 +245,7 @@ export interface FormBasics {
   category: string;
   planId: string;
   notes: string;
+  repeat: RepeatInterval;
 }
 
 export interface ExpenseFormInitial {
@@ -250,6 +265,7 @@ export function initialFromExpense(e: ExpenseDetail, overrides: Partial<FormBasi
     if (e.splitMethod === 'EXACT') split.exact[s.memberId] = minorToInput(s.inputValue, cur);
     if (e.splitMethod === 'PERCENTAGE') split.percent[s.memberId] = bpsToInput(s.inputValue);
     if (e.splitMethod === 'SHARES') split.shares[s.memberId] = sharesToInput(s.inputValue);
+    if (e.splitMethod === 'ADJUSTMENT' && s.inputValue > 0) split.adjustment[s.memberId] = minorToInput(s.inputValue, cur);
   }
   if (e.splitMethod === 'ITEMIZED') {
     split.items = e.items.map((it) => ({ ...newItem(it.memberIds), description: it.description, quantity: String(it.quantity), unitPrice: minorToInput(it.unitPriceMinor, cur) }));
@@ -267,6 +283,7 @@ export function initialFromExpense(e: ExpenseDetail, overrides: Partial<FormBasi
       category: e.category,
       planId: e.planId ?? '',
       notes: e.notes ?? '',
+      repeat: e.repeatInterval,
       ...overrides,
     },
     payers: {

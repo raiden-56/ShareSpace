@@ -63,7 +63,9 @@ export default function GroupMembers() {
   const navigate = useNavigate();
   const fmt = useFormat();
   const balances = useBalancesQuery(groupId);
-  const manage = !!helpers?.can('manageMembers');
+  // A direct group is just you and one friend: nobody can be added, invited or removed.
+  const isDirect = !!helpers?.data.group.isDirect;
+  const manage = !!helpers?.can('manageMembers') && !isDirect;
   const invitations = useGroupInvitationsQuery(groupId, { skip: !manage });
   const [dialog, setDialog] = useState<DialogState>(null);
   const [menu, setMenu] = useState<{ anchor: HTMLElement; member: Member } | null>(null);
@@ -82,7 +84,7 @@ export default function GroupMembers() {
   const fail = (e: unknown) => dispatch(showToast({ message: toApiError(e).message, severity: 'error' }));
 
   const canRename = (m: Member) => !helpers.isArchived && (m.isYou || manage);
-  const canChangeRole = (m: Member) => role === 'OWNER' && !helpers.isArchived && m.hasAccount && !m.isYou;
+  const canChangeRole = (m: Member) => role === 'OWNER' && !isDirect && !helpers.isArchived && m.hasAccount && !m.isYou;
   const canRemove = (m: Member) => manage && m.role !== 'OWNER' && !m.isYou && (m.role !== 'ADMIN' || role === 'OWNER');
   const canInvite = (m: Member) => manage && !m.hasAccount;
 
@@ -91,7 +93,11 @@ export default function GroupMembers() {
       <Stack spacing={2.5}>
         <SectionCard
           title={`Members (${active.length})`}
-          subtitle="People with a dashed avatar have not joined with an account yet. They can still be part of expenses."
+          subtitle={
+            isDirect
+              ? 'Expenses outside any group are just between the two of you. Create a group to share costs with more people.'
+              : 'People with a dashed avatar have not joined with an account yet. They can still be part of expenses.'
+          }
           action={
             manage && (
               <Stack direction="row" spacing={1}>
@@ -199,9 +205,11 @@ export default function GroupMembers() {
           >
             Export members (CSV)
           </Button>
-          <Button color="error" startIcon={<LogOut size={16} />} onClick={() => setDialog({ kind: 'leave' })}>
-            Leave group
-          </Button>
+          {!isDirect && (
+            <Button color="error" startIcon={<LogOut size={16} />} onClick={() => setDialog({ kind: 'leave' })}>
+              Leave group
+            </Button>
+          )}
         </Stack>
       </Stack>
 

@@ -12,6 +12,7 @@ const METHODS: { value: SplitMethod; label: string; hint: string }[] = [
   { value: 'EXACT', label: 'Exact', hint: 'Enter each person’s amount' },
   { value: 'PERCENTAGE', label: 'Percent', hint: 'Percentages must add up to 100%' },
   { value: 'SHARES', label: 'Shares', hint: 'Split by weights, e.g. 2 : 1 : 1' },
+  { value: 'ADJUSTMENT', label: 'Adjustment', hint: 'Split equally, then add extra amounts for anyone who should pay more' },
   { value: 'ITEMIZED', label: 'Items', hint: 'Assign receipt items to people' },
 ];
 
@@ -47,7 +48,8 @@ export function SplitEditor({ members, draft, onChange, currency, totalMinor, pr
     onChange(next);
   };
 
-  const valueKey = draft.method === 'EXACT' ? 'exact' : draft.method === 'PERCENTAGE' ? 'percent' : 'shares';
+  const valueKey = draft.method === 'EXACT' ? 'exact' : draft.method === 'PERCENTAGE' ? 'percent' : draft.method === 'ADJUSTMENT' ? 'adjustment' : 'shares';
+  const valueLabel = draft.method === 'EXACT' ? 'Amount' : draft.method === 'PERCENTAGE' ? 'Percentage' : draft.method === 'ADJUSTMENT' ? 'Extra amount' : 'Shares';
 
   return (
     <Box>
@@ -60,7 +62,17 @@ export function SplitEditor({ members, draft, onChange, currency, totalMinor, pr
         onChange={(_e, v: SplitMethod | null) => v && setMethod(v)}
         aria-labelledby="split-method-label"
         size="small"
-        sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', '& .MuiToggleButton-root': { minHeight: 40, textTransform: 'none', fontWeight: 600, px: 0.5 } }}
+        sx={(t) => ({
+          display: 'grid',
+          gridTemplateColumns: 'repeat(6, 1fr)',
+          '& .MuiToggleButton-root': { minHeight: 40, textTransform: 'none', fontWeight: 600, px: 0.5 },
+          // Two rows of three on phones: give each button its own border instead of a joined bar.
+          [t.breakpoints.down('sm')]: {
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: 0.75,
+            '& .MuiToggleButtonGroup-grouped': { m: 0, border: `1px solid ${t.palette.divider}`, borderRadius: `${t.shape.borderRadius}px` },
+          },
+        })}
       >
         {METHODS.map((m) => (
           <ToggleButton key={m.value} value={m.value} aria-label={`${m.label}: ${m.hint}`}>
@@ -128,10 +140,15 @@ export function SplitEditor({ members, draft, onChange, currency, totalMinor, pr
                           htmlInput: {
                             inputMode: 'decimal',
                             className: 'tabular',
-                            'aria-label': `${draft.method === 'EXACT' ? 'Amount' : draft.method === 'PERCENTAGE' ? 'Percentage' : 'Shares'} for ${m.displayName}`,
+                            'aria-label': `${valueLabel} for ${m.displayName}`,
                           },
                           input: {
-                            startAdornment: draft.method === 'EXACT' ? <InputAdornment position="start">{symbol}</InputAdornment> : undefined,
+                            startAdornment:
+                              draft.method === 'EXACT' ? (
+                                <InputAdornment position="start">{symbol}</InputAdornment>
+                              ) : draft.method === 'ADJUSTMENT' ? (
+                                <InputAdornment position="start">+{symbol}</InputAdornment>
+                              ) : undefined,
                             endAdornment: draft.method === 'PERCENTAGE' ? <InputAdornment position="end">%</InputAdornment> : undefined,
                           },
                         }}
