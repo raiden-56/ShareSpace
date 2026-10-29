@@ -6,6 +6,7 @@ import type { ExpenseDetail } from '../../api/types';
 import { useAuth, useFormat } from '../../hooks/useAuth';
 import type { GroupHelpers } from '../../hooks/useGroupContext';
 import { formatBytes, uploadReceipt, validateUpload, ACCEPTED_UPLOAD_TYPES } from '../../lib/upload';
+import { guestAttachmentUrl } from '../../guest/mode';
 import { timeAgo } from '../../lib/format';
 import { useAppDispatch } from '../../store';
 import { showToast } from '../../store/ui';
@@ -91,7 +92,10 @@ export function ReceiptsSection({ expense, canEdit }: { expense: ExpenseDetail; 
       ) : (
         <Stack spacing={1.5}>
           {expense.attachments.map((a) => {
-            const url = `/api/attachments/${a.id}`;
+            // Guest mode serves sample receipts from in-browser URLs.
+            const guestUrl = guestAttachmentUrl(a.id);
+            const url = guestUrl ?? `/api/attachments/${a.id}`;
+            const downloadUrl = guestUrl ?? `${url}?download=true`;
             const isImage = a.mimeType.startsWith('image/');
             return (
               <Box key={a.id} sx={{ border: 1, borderColor: 'divider', borderRadius: 2.5, overflow: 'hidden' }}>
@@ -109,7 +113,7 @@ export function ReceiptsSection({ expense, canEdit }: { expense: ExpenseDetail; 
                     <Typography variant="caption">{formatBytes(a.sizeBytes)}</Typography>
                   </Box>
                   <Tooltip title="Download">
-                    <IconButton component="a" href={`${url}?download=true`} aria-label={`Download ${a.fileName}`}>
+                    <IconButton component="a" href={downloadUrl} download={guestUrl ? a.fileName : undefined} aria-label={`Download ${a.fileName}`}>
                       <Download size={18} />
                     </IconButton>
                   </Tooltip>

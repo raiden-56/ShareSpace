@@ -30,6 +30,8 @@ import {
 } from '@mui/material';
 import { LogOut, PanelLeftClose, PanelLeftOpen, Plus, Search, Bell, Settings, Users, Ellipsis, CircleHelp } from 'lucide-react';
 import { api, useGroupQuery, useLogoutMutation, useUnreadCountQuery } from '../../api/api';
+import { GuestBanner } from '../../guest/GuestBanner';
+import { GUEST_MODE_ENABLED } from '../../guest/mode';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { clearToast, openExpenseDialog, setCreateGroupOpen, setSearchOpen, toggleSidebar } from '../../store/ui';
@@ -282,6 +284,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <AppBar position="sticky" color="inherit" elevation={0} sx={{ bgcolor: 'background.default', borderBottom: 1, borderColor: 'divider', backdropFilter: 'saturate(1.2)' }}>
+            {GUEST_MODE_ENABLED && <GuestBanner />}
             <Toolbar sx={{ gap: 1, minHeight: { xs: 56, md: 64 }, px: { xs: 1.5, md: 3 } }}>
               {desktop ? (
                 <Tooltip title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>

@@ -1,4 +1,5 @@
 import { CSRF_HEADER } from '../api/api';
+import { GUEST_MODE_ENABLED, isGuestActive } from '../guest/mode';
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const ACCEPTED_UPLOAD_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
@@ -17,6 +18,11 @@ export function uploadReceipt(
   file: File,
   onProgress: (fraction: number) => void,
 ): { promise: Promise<void>; abort: () => void } {
+  if (GUEST_MODE_ENABLED && isGuestActive()) {
+    // Guest mode: the file stays in this browser tab as an object URL.
+    const promise = import('../guest/server').then(({ guestUpload }) => guestUpload(groupId, expenseId, file, onProgress));
+    return { promise, abort: () => undefined };
+  }
   const xhr = new XMLHttpRequest();
   const promise = new Promise<void>((resolve, reject) => {
     xhr.open('POST', `/api/groups/${groupId}/expenses/${expenseId}/attachments`);

@@ -4,6 +4,7 @@ import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from './hooks/useAuth';
 import { AppShell } from './components/layout/AppShell';
 import { ErrorState } from './components/common/States';
+import { GUEST_MODE_ENABLED } from './guest/mode';
 
 const Login = lazy(() => import('./pages/auth/Login'));
 const Register = lazy(() => import('./pages/auth/Register'));
@@ -48,6 +49,10 @@ function RequireAuth() {
   const { user, preferences, isLoading, isError, refetch } = useAuth();
   const location = useLocation();
   if (isLoading) return <FullPageSpinner />;
+  const returnTo = `${location.pathname}${location.search}`;
+  const loginPath = `/login${returnTo !== '/' ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`;
+  // Demo builds (e.g. GitHub Pages) may have no API at all: show sign-in with its guest option instead of an error.
+  if (isError && !user && GUEST_MODE_ENABLED) return <Navigate to={loginPath} replace />;
   if (isError) {
     return (
       <Box sx={{ maxWidth: 520, mx: 'auto', mt: 10, px: 2 }}>
@@ -55,10 +60,7 @@ function RequireAuth() {
       </Box>
     );
   }
-  if (!user) {
-    const returnTo = `${location.pathname}${location.search}`;
-    return <Navigate to={`/login${returnTo !== '/' ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`} replace />;
-  }
+  if (!user) return <Navigate to={loginPath} replace />;
   const inviteFlow = location.pathname.startsWith('/invite/');
   if (preferences && !preferences.onboardingCompleted && !inviteFlow && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;

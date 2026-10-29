@@ -1,4 +1,4 @@
-import { createApi, fetchBaseQuery, type FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
+import { createApi, fetchBaseQuery, type BaseQueryFn, type FetchArgs, type FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
 import type {
   BudgetInput,
   ExpenseInput,
@@ -43,6 +43,7 @@ import type {
   SettlementsOverview,
   User,
 } from './types';
+import { GUEST_MODE_ENABLED, isGuestActive } from '../guest/mode';
 
 export const CSRF_HEADER = { 'X-Requested-With': 'ShareSpace' } as const;
 
@@ -68,7 +69,7 @@ export function toApiError(error: unknown): ApiError {
   };
 }
 
-const baseQuery = fetchBaseQuery({
+const networkQuery = fetchBaseQuery({
   baseUrl: '/api',
   credentials: 'same-origin',
   prepareHeaders: (headers) => {
@@ -76,6 +77,15 @@ const baseQuery = fetchBaseQuery({
     return headers;
   },
 });
+
+/** In guest mode (demo builds only) requests are answered in the browser from sample data. */
+const baseQuery: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (args, queryApi, extraOptions) => {
+  if (GUEST_MODE_ENABLED && isGuestActive()) {
+    const { handleGuestRequest } = await import('../guest/server');
+    return handleGuestRequest(args);
+  }
+  return networkQuery(args, queryApi, extraOptions);
+};
 
 const qs = (params: Record<string, unknown>) => {
   const search = new URLSearchParams();
