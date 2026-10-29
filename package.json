@@ -1,0 +1,36 @@
+{
+  "name": "sharespace",
+  "private": true,
+  "version": "0.1.0",
+  "description": "ShareSpace — Plan together. Split fairly. Stay organized.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run migrate --workspace @sharespace/server",
+    "db:seed": "npm run seed --workspace @sharespace/server",
+    "dev": "concurrently -n api,web -c green,yellow \"npm run dev --workspace @sharespace/server\" \"npm run dev --workspace @sharespace/web\"",
+    "build": "npm run typecheck --workspace @sharespace/core && npm run build --workspace @sharespace/server && npm run build --workspace @sharespace/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "playwright test",
+    "lint": "npm run typecheck"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "concurrently": "9.2.1",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "prisma@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.28.2": true
+  }
+}

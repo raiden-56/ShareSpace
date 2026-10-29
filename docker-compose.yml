@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: sharespace-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sharespace
+      POSTGRES_PASSWORD: sharespace
+      POSTGRES_DB: sharespace
+    ports:
+      - "5433:5432"
+    volumes:
+      - sharespace-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sharespace"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  sharespace-db:

@@ -1,0 +1,611 @@
+// ShareSpace relational schema.
+// Money is stored as BIGINT minor units (paise, cents). Balances are always derived from source
+// records (expense payers/splits and recorded settlements) and are never stored redundantly.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum MemberStatus {
+  ACTIVE
+  LEFT
+  REMOVED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REVOKED
+}
+
+enum GroupType {
+  TRIP
+  HOME
+  DINNER
+  FAMILY
+  OFFICE
+  GENERAL
+}
+
+enum SplitMethod {
+  EQUAL
+  EXACT
+  PERCENTAGE
+  SHARES
+  ITEMIZED
+}
+
+enum SettlementStatus {
+  RECORDED
+  REVERSED
+}
+
+enum SettlementMethod {
+  CASH
+  BANK_TRANSFER
+  UPI
+  OTHER
+}
+
+enum PlanType {
+  TRIP
+  DINNER
+  OUTING
+  BIRTHDAY
+  CELEBRATION
+  OFFICE
+  SHOPPING
+  CUSTOM
+}
+
+enum PlanStatus {
+  IDEA
+  PLANNING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  avatarColor  String    @default("#386641")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions        UserSession[]
+  passwordResets  PasswordResetToken[]
+  preference      UserPreference?
+  memberships     GroupMember[]
+  ownedGroups     Group[]           @relation("GroupOwner")
+  notifications   Notification[]
+  sentInvitations GroupInvitation[] @relation("InvitedBy")
+}
+
+model UserSession {
+  id         String    @id @default(cuid())
+  userId     String
+  /// SHA-256 of the opaque session token. The raw token only ever lives in an httpOnly cookie.
+  tokenHash  String    @unique
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserPreference {
+  userId    String   @id
+  data      Json
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Group {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  type          GroupType @default(GENERAL)
+  currency      String
+  multiCurrency Boolean   @default(false)
+  accent        String    @default("#386641")
+  ownerId       String
+  archivedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  owner       User              @relation("GroupOwner", fields: [ownerId], references: [id])
+  members     GroupMember[]
+  invitations GroupInvitation[]
+  categories  GroupCategory[]
+  expenses    Expense[]
+  settlements Settlement[]
+  budget      Budget?
+  plans       Plan[]
+  polls       Poll[]
+  activity    ActivityLog[]
+  comments    Comment[]
+  attachments Attachment[]
+
+  @@index([ownerId])
+}
+
+/// A participant in a group's finances. May be a placeholder (no userId) until someone claims it
+/// through an invitation, so expenses can be recorded for people who have not signed up yet.
+model GroupMember {
+  id          String       @id @default(cuid())
+  groupId     String
+  userId      String?
+  displayName String
+  email       String?
+  role        Role         @default(MEMBER)
+  status      MemberStatus @default(ACTIVE)
+  joinedAt    DateTime     @default(now())
+  leftAt      DateTime?
+
+  group           Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user            User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  payments        ExpensePayer[]
+  splits          ExpenseSplit[]
+  itemShares      ExpenseItemParticipant[]
+  settlementsSent Settlement[]             @relation("SettlementFrom")
+  settlementsRecv Settlement[]             @relation("SettlementTo")
+  planParticipant PlanParticipant[]
+  votes           PollVote[]
+  pollEligibility PollEligibleVoter[]
+  checklistItems  ChecklistItem[]          @relation("ChecklistAssignee")
+  invitations     GroupInvitation[]
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@index([groupId, status])
+}
+
+model GroupInvitation {
+  id           String           @id @default(cuid())
+  groupId      String
+  /// SHA-256 of a 256-bit random token. The raw token is only shown to the inviter once.
+  tokenHash    String           @unique
+  email        String
+  role         Role             @default(MEMBER)
+  memberId     String?
+  invitedById  String
+  status       InvitationStatus @default(PENDING)
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  acceptedById String?
+  respondedAt  DateTime?
+  createdAt    DateTime         @default(now())
+
+  group     Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member    GroupMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  invitedBy User         @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([groupId, status])
+  @@index([email, status])
+}
+
+model GroupCategory {
+  id        String   @id @default(cuid())
+  groupId   String
+  label     String
+  createdAt DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, label])
+}
+
+model Expense {
+  id                  String      @id @default(cuid())
+  groupId             String
+  /// Idempotency key generated by the client. Retried submissions return the original record.
+  clientRequestId     String
+  title               String
+  description         String?
+  notes               String?
+  /// Amount in the group's currency (used for balances, budgets and reports).
+  amountMinor         BigInt
+  currency            String
+  /// Amount exactly as entered, in the currency it was paid in.
+  originalAmountMinor BigInt
+  originalCurrency    String
+  /// Manual exchange rate (1 original unit = fxRate group units) when currencies differ.
+  fxRate              String?
+  fxDate              DateTime?   @db.Date
+  fxSource            String?
+  date                DateTime    @db.Date
+  category            String
+  splitMethod         SplitMethod
+  taxMinor            BigInt      @default(0)
+  serviceMinor        BigInt      @default(0)
+  discountMinor       BigInt      @default(0)
+  planId              String?
+  createdById         String
+  updatedById         String?
+  version             Int         @default(1)
+  deletedAt           DateTime?
+  deletedById         String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  group       Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  plan        Plan?             @relation(fields: [planId], references: [id], onDelete: SetNull)
+  payers      ExpensePayer[]
+  splits      ExpenseSplit[]
+  items       ExpenseItem[]
+  revisions   ExpenseRevision[]
+  comments    Comment[]
+  attachments Attachment[]
+
+  @@unique([groupId, clientRequestId])
+  @@index([groupId, date])
+  @@index([groupId, deletedAt])
+  @@index([planId])
+}
+
+model ExpensePayer {
+  id                  String @id @default(cuid())
+  expenseId           String
+  memberId            String
+  amountMinor         BigInt
+  originalAmountMinor BigInt
+
+  expense Expense     @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  member  GroupMember @relation(fields: [memberId], references: [id])
+
+  @@unique([expenseId, memberId])
+  @@index([memberId])
+}
+
+model ExpenseSplit {
+  id                  String  @id @default(cuid())
+  expenseId           String
+  memberId            String
+  amountMinor         BigInt
+  originalAmountMinor BigInt
+  /// Method input: exact minor units, basis points, or hundredths of a share.
+  inputValue          BigInt?
+  position            Int     @default(0)
+
+  expense Expense     @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  member  GroupMember @relation(fields: [memberId], references: [id])
+
+  @@unique([expenseId, memberId])
+  @@index([memberId])
+}
+
+model ExpenseItem {
+  id             String @id @default(cuid())
+  expenseId      String
+  position       Int
+  description    String
+  quantity       Int
+  unitPriceMinor BigInt
+
+  expense      Expense                  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  participants ExpenseItemParticipant[]
+
+  @@index([expenseId])
+}
+
+model ExpenseItemParticipant {
+  itemId   String
+  memberId String
+
+  item   ExpenseItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  member GroupMember @relation(fields: [memberId], references: [id])
+
+  @@id([itemId, memberId])
+}
+
+/// Immutable audit trail: one snapshot per saved version of an expense.
+model ExpenseRevision {
+  id          String   @id @default(cuid())
+  expenseId   String
+  version     Int
+  action      String
+  snapshot    Json
+  summary     String
+  changedById String
+  createdAt   DateTime @default(now())
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, version, action])
+  @@index([expenseId])
+}
+
+model Comment {
+  id        String    @id @default(cuid())
+  groupId   String
+  expenseId String
+  authorId  String
+  body      String
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId])
+}
+
+model Attachment {
+  id           String    @id @default(cuid())
+  groupId      String
+  expenseId    String?
+  uploadedById String
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  /// Opaque key in private storage. Never exposed directly; files are streamed after an authorization check.
+  storageKey   String    @unique
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+
+  group   Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  expense Expense? @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId])
+}
+
+model Settlement {
+  id              String           @id @default(cuid())
+  groupId         String
+  clientRequestId String
+  fromMemberId    String
+  toMemberId      String
+  amountMinor     BigInt
+  currency        String
+  method          SettlementMethod
+  methodNote      String?
+  date            DateTime         @db.Date
+  notes           String?
+  status          SettlementStatus @default(RECORDED)
+  recordedById    String
+  createdAt       DateTime         @default(now())
+  /// Reversal history. Completed settlements are never deleted; they are reversed with a reason.
+  reversedAt      DateTime?
+  reversedById    String?
+  reversalReason  String?
+
+  group      Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  fromMember GroupMember @relation("SettlementFrom", fields: [fromMemberId], references: [id])
+  toMember   GroupMember @relation("SettlementTo", fields: [toMemberId], references: [id])
+
+  @@unique([groupId, clientRequestId])
+  @@index([groupId, date])
+}
+
+model Budget {
+  id                  String    @id @default(cuid())
+  groupId             String    @unique
+  totalMinor          BigInt
+  currency            String
+  startDate           DateTime? @db.Date
+  endDate             DateTime? @db.Date
+  warningThresholdPct Int       @default(80)
+  /// Last state a warning was sent for, so each threshold crossing notifies once.
+  lastAlertState      String    @default("NORMAL")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  group      Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  categories BudgetCategory[]
+}
+
+model BudgetCategory {
+  id          String @id @default(cuid())
+  budgetId    String
+  category    String
+  amountMinor BigInt
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@unique([budgetId, category])
+}
+
+model Plan {
+  id                   String     @id @default(cuid())
+  groupId              String
+  title                String
+  description          String?
+  type                 PlanType   @default(CUSTOM)
+  status               PlanStatus @default(PLANNING)
+  startDate            DateTime   @db.Date
+  endDate              DateTime?  @db.Date
+  location             String?
+  estimatedBudgetMinor BigInt?
+  notes                String?
+  createdById          String
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  archivedAt           DateTime?
+
+  group        Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  participants PlanParticipant[]
+  itinerary    ItineraryItem[]
+  checklist    ChecklistItem[]
+  expenses     Expense[]
+  polls        Poll[]
+
+  @@index([groupId, startDate])
+}
+
+model PlanParticipant {
+  planId   String
+  memberId String
+
+  plan   Plan        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  member GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@id([planId, memberId])
+}
+
+model ItineraryItem {
+  id                 String    @id @default(cuid())
+  planId             String
+  position           Int
+  title              String
+  description        String?
+  date               DateTime? @db.Date
+  startTime          String?
+  endTime            String?
+  location           String?
+  estimatedCostMinor BigInt?
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, position])
+}
+
+model ChecklistItem {
+  id               String    @id @default(cuid())
+  planId           String
+  position         Int
+  title            String
+  assigneeMemberId String?
+  dueDate          DateTime? @db.Date
+  completedAt      DateTime?
+  completedById    String?
+  createdById      String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  plan     Plan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  assignee GroupMember? @relation("ChecklistAssignee", fields: [assigneeMemberId], references: [id], onDelete: SetNull)
+
+  @@index([planId, position])
+}
+
+model Poll {
+  id              String    @id @default(cuid())
+  groupId         String
+  planId          String?
+  question        String
+  closesAt        DateTime?
+  closedAt        DateTime?
+  closedById      String?
+  allowVoteChange Boolean   @default(true)
+  createdById     String
+  createdAt       DateTime  @default(now())
+
+  group    Group               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  plan     Plan?               @relation(fields: [planId], references: [id], onDelete: SetNull)
+  options  PollOption[]
+  votes    PollVote[]
+  eligible PollEligibleVoter[]
+
+  @@index([groupId])
+}
+
+model PollOption {
+  id       String @id @default(cuid())
+  pollId   String
+  position Int
+  label    String
+
+  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+}
+
+model PollEligibleVoter {
+  pollId   String
+  memberId String
+
+  poll   Poll        @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  member GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@id([pollId, memberId])
+}
+
+model PollVote {
+  id        String   @id @default(cuid())
+  pollId    String
+  optionId  String
+  memberId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  poll   Poll        @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option PollOption  @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  member GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  /// One vote per member per poll; changing a vote updates this row.
+  @@unique([pollId, memberId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  groupId   String?
+  type      String
+  title     String
+  body      String
+  link      String?
+  /// Prevents duplicate reminders (e.g. one "plan starts soon" notice per plan per user).
+  dedupeKey String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, createdAt])
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  groupId     String
+  actorUserId String?
+  actorName   String
+  type        String
+  entityType  String
+  entityId    String?
+  planId      String?
+  summary     String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, createdAt])
+  @@index([planId])
+}

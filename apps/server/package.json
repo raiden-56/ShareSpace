@@ -1,0 +1,38 @@
+{
+  "name": "@sharespace/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "start": "tsx --env-file-if-exists=.env src/index.ts",
+    "build": "prisma generate && tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "generate": "prisma generate",
+    "seed": "tsx --env-file-if-exists=.env prisma/seed.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "@sharespace/core": "*",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "multer": "^2.0.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^5.0.3",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^22.18.0",
+    "@types/supertest": "^6.0.3",
+    "prisma": "6.19.3",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.6",
+    "vitest": "3.2.7"
+  }
+}
