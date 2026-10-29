@@ -16,5 +16,25 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # The production image (API + web app). Start with: docker compose --profile app up -d --build
+  # Put it behind an HTTPS reverse proxy and set APP_URL to the public URL before exposing it.
+  app:
+    profiles: ["app"]
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sharespace:sharespace@db:5432/sharespace?schema=public
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      TRUST_PROXY: ${TRUST_PROXY:-loopback}
+    ports:
+      - "8080:8080"
+    volumes:
+      - sharespace-storage:/data/storage
+
 volumes:
   sharespace-db:
+  sharespace-storage:

@@ -1,0 +1,29 @@
+# Render Blueprint: in the Render dashboard choose New → Blueprint and select this GitHub repository.
+# It creates the PostgreSQL database and the web service (built from the Dockerfile) and wires them
+# together. Each push to main deploys once the GitHub Actions checks for that commit have passed.
+services:
+  - type: web
+    name: sharespace
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sharespace-db
+          property: connectionString
+      # Render sits in front of the app as a load balancer; trust it for the client IP used by rate limiting.
+      - key: TRUST_PROXY
+        value: "1"
+      # APP_URL defaults to Render's RENDER_EXTERNAL_URL. Set it here if you add a custom domain.
+
+databases:
+  - name: sharespace-db
+    plan: free
+    region: singapore
+    databaseName: sharespace
+    user: sharespace

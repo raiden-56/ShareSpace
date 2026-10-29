@@ -8,3 +8,5 @@ playwright-report
 test-results
 *.log
 .vite
+# Receipt uploads written by tests and local runs
+apps/server/storage-*

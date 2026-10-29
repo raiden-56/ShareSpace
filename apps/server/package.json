@@ -12,7 +12,8 @@
     "migrate:deploy": "prisma migrate deploy",
     "generate": "prisma generate",
     "seed": "tsx --env-file-if-exists=.env prisma/seed.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start:prod": "prisma migrate deploy && node --import tsx src/index.ts"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
@@ -22,6 +23,8 @@
     "express-rate-limit": "^8.1.0",
     "helmet": "^8.1.0",
     "multer": "^2.0.2",
+    "prisma": "6.19.3",
+    "tsx": "^4.20.6",
     "zod": "4.6.7"
   },
   "devDependencies": {
@@ -30,9 +33,7 @@
     "@types/multer": "^2.0.0",
     "@types/node": "^22.18.0",
     "@types/supertest": "^6.0.3",
-    "prisma": "6.19.3",
     "supertest": "^7.1.4",
-    "tsx": "^4.20.6",
     "vitest": "3.2.7"
   }
 }

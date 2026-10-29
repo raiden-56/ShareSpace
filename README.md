@@ -94,7 +94,10 @@ ShareSpace/
 ├─ apps/web/               React 19 + Vite 7 + MUI 7 + Redux Toolkit (RTK Query)
 │  └─ src/                 api/, store/, theme/, components/, pages/, hooks/, lib/
 ├─ e2e/                    Playwright end-to-end and responsive tests
-├─ docker-compose.yml      PostgreSQL 16 (port 5433)
+├─ .github/workflows/ci.yml  Tests, end-to-end and Docker image pipeline
+├─ Dockerfile              Production image (API + web app, port 8080)
+├─ render.yaml             Render Blueprint (web service + PostgreSQL)
+├─ docker-compose.yml      PostgreSQL 16 (port 5433); production app under the "app" profile
 └─ playwright.config.ts
 ```
 
@@ -127,16 +130,65 @@ npm run dev                                    # API on :4100, web on http://loc
 
 Vite proxies `/api` to the API, so the browser only ever talks to one origin.
 
-### Production
+### Production build without Docker
 
 ```bash
 npm run build                                  # typecheck core + server, build web into apps/web/dist
 cd apps/server
-NODE_ENV=production WEB_DIST=../web/dist APP_URL=https://your.domain npx prisma migrate deploy
-NODE_ENV=production WEB_DIST=../web/dist APP_URL=https://your.domain npm start
+NODE_ENV=production WEB_DIST=../web/dist APP_URL=https://your.domain npm run start:prod   # migrate, then serve
 ```
 
 With `WEB_DIST` set, the API also serves the built web app from the same origin. Run it behind HTTPS: in production the session cookie is `Secure`.
+
+## Deploying from GitHub
+
+GitHub Pages only serves static files, so it cannot run ShareSpace on its own: the app needs the Node API and PostgreSQL. The repository is set up so GitHub runs the checks and builds the image, and a container host runs it.
+
+### What runs on GitHub (`.github/workflows/ci.yml`)
+
+On every push to `main` and every pull request:
+
+1. **Tests**: typecheck, core unit tests, API tests against a PostgreSQL service container, web component tests, and the production build.
+2. **End-to-end**: both Playwright specs with Playwright's bundled Chromium. The HTML report and screenshots are uploaded as a run artifact.
+3. **Docker image**: built from the `Dockerfile` after both test jobs pass. On `main` it is pushed to GitHub Container Registry as `ghcr.io/<owner>/<repo>:latest` and `:sha-<commit>`. Pull requests only build it.
+
+No secrets are needed; the workflow uses the built-in `GITHUB_TOKEN`.
+
+### The image (`Dockerfile`)
+
+One container serves the API and the web app on port 8080 (or `$PORT`). On start it runs `prisma migrate deploy` (applies pending migrations, never wipes data), then starts the server as a non-root user. Receipts are written to `/data/storage`; mount a volume there to keep them.
+
+### Option A: Render (deploys straight from the repository)
+
+`render.yaml` is a Render Blueprint that creates the database and the web service in Singapore.
+
+1. Push this repository to GitHub.
+2. In Render: **New → Blueprint**, connect GitHub, pick the repository, and apply.
+3. Render builds the Dockerfile and runs migrations. The app is live at `https://sharespace-xxxx.onrender.com`.
+
+Later pushes to `main` deploy automatically once the GitHub Actions checks for that commit pass (`autoDeployTrigger: checksPass`). `APP_URL` defaults to the Render URL; set it in Render if you add a custom domain.
+
+Free-plan caveats:
+- The service sleeps after about 15 minutes idle; the first request then takes up to a minute.
+- Render's free PostgreSQL database expires 30 days after creation. Use a paid database plan for anything you want to keep.
+- The free plan has no persistent disk, so uploaded receipts are lost on each deploy or restart. Attach a disk at `/data` (paid plans) or move receipts to object storage.
+
+### Option B: any server with Docker
+
+```bash
+APP_URL=https://your.domain docker compose --profile app up -d --build   # app on :8080, data in named volumes
+```
+
+Or run the published image against an existing database:
+
+```bash
+docker run -d -p 8080:8080 -v sharespace-receipts:/data/storage \
+  -e DATABASE_URL="postgresql://user:pass@host:5432/sharespace?schema=public" \
+  -e APP_URL=https://your.domain -e TRUST_PROXY=1 \
+  ghcr.io/<owner>/<repo>:latest
+```
+
+Put an HTTPS reverse proxy (Caddy, nginx, a cloud load balancer) in front. The same image also runs on Azure Container Apps, Google Cloud Run, Fly.io or Railway; set `DATABASE_URL`, `APP_URL` and `TRUST_PROXY`. If the GHCR package is private, either make it public in the package settings or give the host a registry token.
 
 > On Windows, stop running dev servers before `npm run build`; `prisma generate` cannot replace the query-engine DLL while it is in use.
 
@@ -146,12 +198,13 @@ With `WEB_DIST` set, the API also serves the built web app from the same origin.
 |---|---|---|
 | `DATABASE_URL` | — (required) | PostgreSQL connection string |
 | `PORT` | `4100` | API port |
-| `APP_URL` | `http://localhost:5180` | Public web URL; used for invitation and reset links, and the CSRF origin check |
+| `APP_URL` | `http://localhost:5180` | Public web URL; used for invitation and reset links, and the CSRF origin check. Required in production; on Render it falls back to `RENDER_EXTERNAL_URL` |
 | `NODE_ENV` | `development` | `production` enables `Secure` cookies and disables logging reset links |
 | `STORAGE_DIR` | `./storage` | Private receipt storage directory (never served statically) |
 | `SESSION_TTL_DAYS` | `30` | Session lifetime |
 | `AUTH_RATE_LIMIT` | `30` | Max auth attempts per IP per 15 minutes |
 | `WEB_DIST` | unset | Path to the built web app to serve in production |
+| `TRUST_PROXY` | `loopback` | Express `trust proxy` setting. Behind a hosting load balancer set the hop count (usually `1`) so rate limiting sees real client IPs |
 
 The web app takes one optional variable, `API_URL` (dev/preview proxy target, default `http://localhost:4100`).
 
@@ -226,4 +279,4 @@ To run this in production you would add:
 1. An email provider (SMTP/SES) wired into invitation and password-reset flows.
 2. Object storage for receipts.
 3. Optionally, an exchange-rate provider and a job scheduler for reminders.
-4. HTTPS termination and a managed PostgreSQL instance.
+4. A managed PostgreSQL instance and HTTPS (both provided by the Render blueprint; see Deploying from GitHub).
